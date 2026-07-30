@@ -1,0 +1,51 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Category {
+  RG
+  STORAGE
+  NSG_ASG
+  VM_WINDOWS_MARKETPLACE
+  VM_WINDOWS_CUSTOM
+  VM_LINUX
+}
+
+model Template {
+  id          String             @id @default(cuid())
+  name        String
+  category    Category
+  description String?
+  tfContent   String?            @db.Text
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  variables   TemplateVariable[]
+  generations Generation[]
+}
+
+model TemplateVariable {
+  id           String   @id @default(cuid())
+  templateId   String
+  template     Template @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  name         String
+  type         String   @default("string") // string | number | bool | list | map
+  defaultValue String?  @db.Text
+  description  String?
+  required     Boolean  @default(false)
+  order        Int      @default(0)
+}
+
+model Generation {
+  id           String   @id @default(cuid())
+  templateId   String
+  template     Template @relation(fields: [templateId], references: [id])
+  fileName     String
+  resultTfvars String   @db.Text
+  diffJson     String   @db.Text
+  createdAt    DateTime @default(now())
+}
