@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 
+export const dynamic = "force-dynamic";
+
 const CATEGORY_LABELS: Record<string, string> = {
   RG: "Resource Group",
   STORAGE: "Storage Account",
