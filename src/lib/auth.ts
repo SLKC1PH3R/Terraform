@@ -8,23 +8,36 @@ function getSecret() {
   return secret;
 }
 
-function sign(value: string) {
-  return crypto.createHmac("sha256", getSecret()).update(value).digest("hex");
+async function getHmacKey() {
+  return globalThis.crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(getSecret()),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
 }
 
-export function createSessionToken() {
+async function sign(value: string): Promise<string> {
+  const key = await getHmacKey();
+  const sigBuffer = await globalThis.crypto.subtle.sign("HMAC", key, new TextEncoder().encode(value));
+  return Buffer.from(sigBuffer).toString("hex");
+}
+
+export async function createSessionToken(): Promise<string> {
   const payload = `ok:${Date.now()}`;
-  const sig = sign(payload);
+  const sig = await sign(payload);
   return Buffer.from(`${payload}.${sig}`).toString("base64");
 }
 
-export function verifySessionToken(token: string | undefined): boolean {
+export async function verifySessionToken(token: string | undefined): Promise<boolean> {
   if (!token) return false;
   try {
     const decoded = Buffer.from(token, "base64").toString("utf-8");
     const [payload, sig] = decoded.split(".");
     if (!payload || !sig) return false;
-    return sign(payload) === sig;
+    const expectedSig = await sign(payload);
+    return expectedSig === sig;
   } catch {
     return false;
   }
@@ -42,7 +55,7 @@ export function checkPassword(password: string): boolean {
 
 export const SESSION_COOKIE_NAME = COOKIE_NAME;
 
-export function isAuthenticated(): boolean {
+export async function isAuthenticated(): Promise<boolean> {
   const token = cookies().get(COOKIE_NAME)?.value;
   return verifySessionToken(token);
 }

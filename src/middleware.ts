@@ -3,7 +3,7 @@ import { verifySessionToken, SESSION_COOKIE_NAME } from "@/lib/auth";
 
 const PUBLIC_PATHS = ["/login", "/api/auth/login"];
 
-export function middleware(req: NextRequest) {
+export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   if (
@@ -15,7 +15,7 @@ export function middleware(req: NextRequest) {
   }
 
   const token = req.cookies.get(SESSION_COOKIE_NAME)?.value;
-  if (!verifySessionToken(token)) {
+  if (!(await verifySessionToken(token))) {
     const loginUrl = new URL("/login", req.url);
     return NextResponse.redirect(loginUrl);
   }
