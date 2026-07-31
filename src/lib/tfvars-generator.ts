@@ -76,6 +76,75 @@ export function buildTfvars(variables: VariableForGeneration[]): {
   return { content: lines.join("\n") + "\n", diff };
 }
 
+const RG_NAME_PATTERN = /^rg-(.+)-(prod|ppd|qual|sdbx|homl)-\d+$/i;
+
+/**
+ * Découpe un nom de Resource Group Fidal (ex. "rg-azdevops-ppd-001") en
+ * service_fullname ("azdevops") et env ("ppd"), tels qu'attendus par le
+ * template RG. Retourne null si le nom ne suit pas la convention.
+ */
+export function parseResourceGroupName(
+  rgName: string
+): { serviceFullname: string; env: string } | null {
+  const match = rgName.trim().match(RG_NAME_PATTERN);
+  if (!match) return null;
+  return { serviceFullname: match[1], env: match[2].toLowerCase() };
+}
+
+function buildMapString(pairs: Record<string, string | undefined>): string {
+  return Object.entries(pairs)
+    .filter(([, v]) => !!v)
+    .map(([k, v]) => `${k}=${v}`)
+    .join(", ");
+}
+
+/**
+ * Déduit les valeurs des variables du template RG (env, service_fullname,
+ * tags_always, tags_service, tags_rg) à partir des champs déjà extraits de la
+ * fiche FIS d'un serveur (le champ "Resource Group" donne env/service_fullname,
+ * les balises Builder/Environment/Deployment/ROS/Service_Name/Service_ID/
+ * Description alimentent les tags). Retourne null si le champ "Resource Group"
+ * de la fiche n'est pas exploitable (absent ou hors convention de nommage).
+ */
+export function deriveRgVariablesFromServerFIS(
+  extracted: { key: string; value: string }[],
+  rgTemplateVariables: { name: string; type: string; defaultValue: string | null }[]
+): { variables: VariableForGeneration[]; serviceFullname: string; env: string } | null {
+  const map = new Map(extracted.map((e) => [e.key, e.value]));
+  const rgValue = map.get("resource_group");
+  if (!rgValue) return null;
+
+  const parsed = parseResourceGroupName(rgValue);
+  if (!parsed) return null;
+
+  const derived: Record<string, string> = {
+    env: parsed.env,
+    service_fullname: parsed.serviceFullname,
+    tags_always: buildMapString({
+      Builder: map.get("builder"),
+      Environment: map.get("environment"),
+      Deployment: map.get("deployment"),
+    }),
+    tags_service: buildMapString({
+      ROS: map.get("ros"),
+      Service_Name: map.get("service_name"),
+      Service_ID: map.get("service_id"),
+    }),
+    tags_rg: buildMapString({
+      Description: map.get("description"),
+    }),
+  };
+
+  const variables = rgTemplateVariables.map((tv) => ({
+    name: tv.name,
+    type: tv.type,
+    defaultValue: tv.defaultValue,
+    finalValue: derived[tv.name] !== undefined && derived[tv.name] !== "" ? derived[tv.name] : tv.defaultValue || "",
+  }));
+
+  return { variables, serviceFullname: parsed.serviceFullname, env: parsed.env };
+}
+
 /**
  * Fait correspondre les variables extraites du fichier Excel (clé/valeur normalisée)
  * aux variables définies dans le template. Les variables du template sans

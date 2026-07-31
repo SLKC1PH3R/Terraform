@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { deriveRgVariablesFromServerFIS } from "@/lib/tfvars-generator";
 
 interface TemplateVariable {
   id: string;
@@ -33,6 +34,13 @@ interface DiffEntry {
   changed: boolean;
 }
 
+interface RgInfo {
+  templateId: string;
+  serviceFullname: string;
+  env: string;
+  rows: Row[];
+}
+
 const CATEGORY_LABELS: Record<string, string> = {
   RG: "Resource Group",
   STORAGE: "Storage Account",
@@ -53,6 +61,10 @@ export default function GeneratePage() {
 
   const [result, setResult] = useState<{ id: string; content: string; diff: DiffEntry[] } | null>(null);
   const [generating, setGenerating] = useState(false);
+
+  const [rgInfo, setRgInfo] = useState<RgInfo | null>(null);
+  const [createRg, setCreateRg] = useState(false);
+  const [rgResult, setRgResult] = useState<{ id: string; content: string; diff: DiffEntry[] } | null>(null);
 
   useEffect(() => {
     fetch("/api/templates")
@@ -100,6 +112,41 @@ export default function GeneratePage() {
 
     setRows(newRows);
     setStep(2);
+
+    const rgTemplate = templates.find((t) => t.category === "RG");
+    setCreateRg(false);
+    setRgResult(null);
+
+    if (rgTemplate && selectedTemplate.category !== "RG") {
+      const derived = deriveRgVariablesFromServerFIS(data.extracted, rgTemplate.variables);
+      if (derived) {
+        setRgInfo({
+          templateId: rgTemplate.id,
+          serviceFullname: derived.serviceFullname,
+          env: derived.env,
+          rows: derived.variables.map((v) => ({
+            name: v.name,
+            type: v.type,
+            defaultValue: v.defaultValue || "",
+            finalValue: v.finalValue,
+            matched: true,
+          })),
+        });
+      } else {
+        setRgInfo(null);
+      }
+    } else {
+      setRgInfo(null);
+    }
+  }
+
+  function updateRgRowValue(index: number, value: string) {
+    setRgInfo((info) => {
+      if (!info) return info;
+      const rows = [...info.rows];
+      rows[index] = { ...rows[index], finalValue: value };
+      return { ...info, rows };
+    });
   }
 
   function updateRowValue(index: number, value: string) {
@@ -130,14 +177,39 @@ export default function GeneratePage() {
     });
 
     const data = await res.json();
-    setGenerating(false);
 
     if (!res.ok) {
+      setGenerating(false);
       setError(data.error || "Erreur lors de la génération");
       return;
     }
 
     setResult(data);
+
+    if (createRg && rgInfo) {
+      const rgRes = await fetch("/api/generate/build", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          templateId: rgInfo.templateId,
+          fileName,
+          variables: rgInfo.rows.map((r) => ({
+            name: r.name,
+            type: r.type,
+            defaultValue: r.defaultValue,
+            finalValue: r.finalValue,
+          })),
+        }),
+      });
+      const rgData = await rgRes.json();
+      if (rgRes.ok) {
+        setRgResult(rgData);
+      } else {
+        setError(rgData.error || "Erreur lors de la génération du Resource Group");
+      }
+    }
+
+    setGenerating(false);
     setStep(3);
   }
 
@@ -156,6 +228,9 @@ export default function GeneratePage() {
             setStep(1);
             setRows([]);
             setResult(null);
+            setRgInfo(null);
+            setCreateRg(false);
+            setRgResult(null);
           }}
         >
           <option value="">— Sélectionner —</option>
@@ -225,6 +300,53 @@ export default function GeneratePage() {
               </tbody>
             </table>
           </div>
+
+          {rgInfo && (
+            <div className="border-t border-slate-800 pt-3 space-y-3">
+              <label className="flex items-start gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="mt-1"
+                  checked={createRg}
+                  onChange={(e) => setCreateRg(e.target.checked)}
+                />
+                <span>
+                  Le Resource Group <code>rg-{rgInfo.serviceFullname}-{rgInfo.env}-xxx</code> n'existe pas
+                  encore sur Azure → générer aussi son .tfvars (déduit de cette fiche FIS).
+                </span>
+              </label>
+
+              {createRg && (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-left text-slate-400 text-xs uppercase">
+                        <th className="py-2 pr-3">Variable RG</th>
+                        <th className="py-2 pr-3">Défaut</th>
+                        <th className="py-2 pr-3">Valeur finale</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rgInfo.rows.map((r, i) => (
+                        <tr key={r.name} className="border-t border-slate-800">
+                          <td className="py-2 pr-3 font-mono text-xs">{r.name}</td>
+                          <td className="py-2 pr-3 text-slate-500 text-xs">{r.defaultValue || "—"}</td>
+                          <td className="py-2 pr-3">
+                            <input
+                              className="input py-1"
+                              value={r.finalValue}
+                              onChange={(e) => updateRgRowValue(i, e.target.value)}
+                            />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
           <button className="btn" onClick={handleGenerate} disabled={generating}>
             {generating ? "Génération..." : "Générer le tfvars"}
           </button>
@@ -250,6 +372,27 @@ export default function GeneratePage() {
           <p className="text-xs text-slate-500">
             <span className="text-emerald-400">Vert</span> = valeur modifiée par rapport au défaut du template.
           </p>
+        </div>
+      )}
+
+      {/* Résultat pour le Resource Group, si demandé */}
+      {rgResult && (
+        <div className="card space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="font-semibold">
+              Résultat — Resource Group rg-{rgInfo?.serviceFullname}-{rgInfo?.env}-xxx
+            </h2>
+            <a href={`/api/generate/${rgResult.id}/download`} className="btn">
+              Télécharger le .tfvars
+            </a>
+          </div>
+          <pre className="bg-slate-950 border border-slate-800 rounded-lg p-4 text-sm overflow-x-auto font-mono">
+            {rgResult.diff.map((d) => (
+              <div key={d.name} className={d.changed ? "text-emerald-400" : "text-slate-300"}>
+                {formatLine(d)}
+              </div>
+            ))}
+          </pre>
         </div>
       )}
     </div>
