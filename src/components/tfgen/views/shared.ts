@@ -7,6 +7,7 @@ export const CATEGORY_LABELS: Record<string, string> = {
   VM_WINDOWS_MARKETPLACE: "VM Windows (Marketplace)",
   VM_WINDOWS_CUSTOM: "VM Windows (Custom)",
   VM_LINUX: "VM Linux",
+  LOAD_BALANCER: "Load Balancer",
 };
 
 export const CATEGORIES = [
@@ -16,9 +17,12 @@ export const CATEGORIES = [
   { value: "VM_WINDOWS_MARKETPLACE", label: "VM Windows (Marketplace)" },
   { value: "VM_WINDOWS_CUSTOM", label: "VM Windows (Custom)" },
   { value: "VM_LINUX", label: "VM Linux" },
+  { value: "LOAD_BALANCER", label: "Load Balancer" },
 ];
 
-/** Convertit une catégorie DB (enum Prisma) vers la ResourceCategory du design system. */
+/** Convertit une catégorie DB vers la ResourceCategory du design system, pour
+ * les catégories connues. Une catégorie inconnue (ajoutée à la volée depuis
+ * l'éditeur) est affichée telle quelle, avec un style de badge neutre. */
 export const CATEGORY_TO_DESIGN: Record<string, ResourceCategory> = {
   RG: "RG",
   STORAGE: "Storage",
@@ -26,10 +30,11 @@ export const CATEGORY_TO_DESIGN: Record<string, ResourceCategory> = {
   VM_WINDOWS_MARKETPLACE: "VM Windows",
   VM_WINDOWS_CUSTOM: "VM Windows",
   VM_LINUX: "VM Linux",
+  LOAD_BALANCER: "ILB",
 };
 
 export function toDesignCategory(dbCategory: string): ResourceCategory {
-  return CATEGORY_TO_DESIGN[dbCategory] ?? "RG";
+  return CATEGORY_TO_DESIGN[dbCategory] ?? dbCategory;
 }
 
 export interface ApiTemplateVariable {

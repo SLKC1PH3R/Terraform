@@ -8,19 +8,10 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum Category {
-  RG
-  STORAGE
-  NSG_ASG
-  VM_WINDOWS_MARKETPLACE
-  VM_WINDOWS_CUSTOM
-  VM_LINUX
-}
-
 model Template {
   id          String             @id @default(cuid())
   name        String
-  category    Category
+  category    String // libre : RG, STORAGE, NSG_ASG, VM_WINDOWS_MARKETPLACE, VM_WINDOWS_CUSTOM, VM_LINUX, LOAD_BALANCER, ou toute nouvelle catégorie ajoutée depuis l'éditeur
   description String?
   tfContent   String?            @db.Text
   createdAt   DateTime           @default(now())

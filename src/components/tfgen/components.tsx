@@ -2,9 +2,9 @@
 
 import * as React from 'react';
 import {
-  categoryStyle,
   color,
   font,
+  getCategoryStyle,
   syntax,
   type ResourceCategory,
 } from './tokens';
@@ -79,7 +79,7 @@ export function CategoryBadge({
   category: ResourceCategory;
   size?: 'sm' | 'md';
 }) {
-  const c = categoryStyle[category];
+  const c = getCategoryStyle(category);
   return (
     <span
       style={{
@@ -370,7 +370,7 @@ export function VariableSection({
   onRowChange?: (rowIndex: number, value: string) => void;
 }) {
   const modified = section.rows.filter((r) => r.state === 'modified').length;
-  const c = categoryStyle[section.category];
+  const c = getCategoryStyle(section.category);
   return (
     <div
       style={{

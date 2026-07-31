@@ -85,7 +85,16 @@ export default function EditorView({
         ))}
       </div>
 
-      <TemplateEditor key={selectedId || "new"} initial={initial} onSaved={onSaved} onDeleted={onSaved} />
+      <TemplateEditor
+        key={selectedId || "new"}
+        initial={initial}
+        extraCategories={Array.from(new Set(templates.map((t) => t.category))).map((c) => ({
+          value: c,
+          label: c,
+        }))}
+        onSaved={onSaved}
+        onDeleted={onSaved}
+      />
     </div>
   );
 }
