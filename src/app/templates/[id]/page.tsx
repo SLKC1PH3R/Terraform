@@ -26,6 +26,7 @@ export default async function EditTemplatePage({ params }: { params: { id: strin
             defaultValue: v.defaultValue || "",
             description: v.description || "",
             required: v.required,
+            group: v.group || "",
           })),
         }}
       />

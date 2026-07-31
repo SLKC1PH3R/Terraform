@@ -31,6 +31,7 @@ export async function POST(req: NextRequest) {
           description: v.description || null,
           required: !!v.required,
           order: i,
+          group: v.group || null,
         })),
       },
     },

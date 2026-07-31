@@ -32,6 +32,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
           description: v.description || null,
           required: !!v.required,
           order: i,
+          group: v.group || null,
         })),
       },
     },

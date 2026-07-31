@@ -3,6 +3,7 @@ export interface ParsedTfVariable {
   type: string; // string | number | bool | list | map
   defaultValue: string;
   description: string;
+  group: string; // si non vide, cette variable est une sous-clé du map <group>
 }
 
 /**
@@ -32,24 +33,6 @@ function inferType(raw: string): string {
   return "string";
 }
 
-/** Convertit un bloc HCL `{ cle = "valeur" ... }` vers le format attendu par
- * l'app pour les variables de type "map" : "cle=valeur, cle2=valeur2" */
-function mapBlockToAppFormat(raw: string): string {
-  const inner = raw.trim().replace(/^\{/, "").replace(/\}$/, "");
-  const pairs: string[] = [];
-  for (const rawLine of inner.split("\n")) {
-    const line = rawLine.trim();
-    if (!line) continue;
-    const m = line.match(/^([a-zA-Z_][a-zA-Z0-9_-]*)\s*=\s*(.*)$/);
-    if (!m) continue;
-    let val = m[2].trim();
-    const strMatch = val.match(/^"([\s\S]*)"$/);
-    if (strMatch) val = strMatch[1];
-    pairs.push(`${m[1]}=${val}`);
-  }
-  return pairs.join(", ");
-}
-
 /** Convertit une liste HCL `["a", "b"]` vers le format attendu par l'app pour
  * les variables de type "list" : "a, b" */
 function listToAppFormat(raw: string): string {
@@ -67,25 +50,28 @@ function listToAppFormat(raw: string): string {
 
 function extractDefaultValue(type: string, raw: string): string {
   const v = raw.trim();
-  if (type === "map") return mapBlockToAppFormat(v);
   if (type === "list") return listToAppFormat(v);
   if (type === "string") {
     const m = v.match(/^"([\s\S]*)"$/);
     return m ? m[1] : v;
   }
-  return v;
+  return v; // number / bool telles quelles
+}
+
+interface RawAssignment {
+  name: string;
+  valueLines: string[]; // lignes brutes (avec commentaires), la 1ère contient "name = ..."
+  description: string;
 }
 
 /**
- * Extrait les variables d'un fichier .tfvars (ou les assignations
- * `key = value` d'un fichier .tf) : nom, type déduit, valeur par défaut, et
- * description (déduite du commentaire précédant l'assignation).
+ * Scanne une séquence de lignes (fichier complet, ou intérieur d'un bloc map)
+ * et retourne les assignations `key = value` de premier niveau, avec leurs
+ * lignes brutes (pour les valeurs multi-lignes) et la description déduite du
+ * commentaire précédent.
  */
-export function parseTfvars(content: string): ParsedTfVariable[] {
-  const rawLines = content.split(/\r?\n/);
-  const results: ParsedTfVariable[] = [];
-  const seen = new Set<string>();
-
+function scanAssignments(rawLines: string[]): RawAssignment[] {
+  const results: RawAssignment[] = [];
   let pendingComments: string[] = [];
   let i = 0;
 
@@ -99,7 +85,6 @@ export function parseTfvars(content: string): ParsedTfVariable[] {
 
     if (trimmed.startsWith("#") || trimmed.startsWith("//")) {
       const text = trimmed.replace(/^(#+|\/\/+)\s?/, "").trim();
-      // ignore les lignes décoratives (séparateurs faits de ponctuation)
       if (text && !/^[-=#*]+$/.test(text)) {
         pendingComments.push(text);
       } else {
@@ -117,33 +102,108 @@ export function parseTfvars(content: string): ParsedTfVariable[] {
     }
 
     const name = match[1];
-    let fullValue = stripInlineComment(match[2]);
-    let depthBrace = countChar(fullValue, "{") - countChar(fullValue, "}");
-    let depthBracket = countChar(fullValue, "[") - countChar(fullValue, "]");
+    const firstValuePart = stripInlineComment(match[2]);
+    let depthBrace = countChar(firstValuePart, "{") - countChar(firstValuePart, "}");
+    let depthBracket = countChar(firstValuePart, "[") - countChar(firstValuePart, "]");
 
+    const valueLines: string[] = [rawLines[i]];
     let j = i;
     while (depthBrace > 0 || depthBracket > 0) {
       j++;
       if (j >= rawLines.length) break;
       const nextTrimmed = rawLines[j].trim();
+      valueLines.push(rawLines[j]);
       if (nextTrimmed.startsWith("#") || nextTrimmed.startsWith("//")) continue;
       const nextLine = stripInlineComment(rawLines[j]);
       depthBrace += countChar(nextLine, "{") - countChar(nextLine, "}");
       depthBracket += countChar(nextLine, "[") - countChar(nextLine, "]");
-      fullValue += "\n" + nextLine;
     }
 
-    const type = inferType(fullValue);
-    const defaultValue = extractDefaultValue(type, fullValue);
-    const description = pendingComments.join(" ").trim();
-
-    if (!seen.has(name)) {
-      seen.add(name);
-      results.push({ name, type, defaultValue, description });
-    }
-
+    results.push({ name, valueLines, description: pendingComments.join(" ").trim() });
     pendingComments = [];
     i = j + 1;
+  }
+
+  return results;
+}
+
+/** Reconstruit le texte de la valeur (sans commentaires) à partir des lignes brutes. */
+function joinValue(valueLines: string[]): string {
+  const parts: string[] = [];
+  for (let idx = 0; idx < valueLines.length; idx++) {
+    const raw = valueLines[idx];
+    const trimmed = raw.trim();
+    if (idx > 0 && (trimmed.startsWith("#") || trimmed.startsWith("//"))) continue;
+    const stripped = stripInlineComment(raw);
+    if (idx === 0) {
+      parts.push(stripped.slice(stripped.indexOf("=") + 1));
+    } else {
+      parts.push(stripped);
+    }
+  }
+  return parts.join("\n");
+}
+
+/** Extrait les lignes internes d'un bloc `{ ... }` (entre la 1ère `{` et la dernière `}`). */
+function innerLinesOfBlock(valueLines: string[]): string[] {
+  const joined = valueLines.join("\n");
+  const start = joined.indexOf("{");
+  const end = joined.lastIndexOf("}");
+  if (start === -1 || end === -1 || end <= start) return [];
+  return joined.slice(start + 1, end).split("\n");
+}
+
+/**
+ * Extrait les variables d'un fichier .tfvars (ou les assignations
+ * `key = value` d'un fichier .tf). Les blocs map (ex. `tags_service = { ROS =
+ * "...", ... }`) sont décomposés en une variable par sous-clé (ROS,
+ * Service_Name, ...), chacune avec son propre type/défaut/description, et
+ * taguée avec `group` = nom du map parent — ce qui permet à la fois un
+ * matching direct avec les fiches FIS (qui exposent ces mêmes clés à plat) et
+ * une recomposition correcte du bloc map à la génération du .tfvars final.
+ */
+export function parseTfvars(content: string): ParsedTfVariable[] {
+  const rawLines = content.split(/\r?\n/);
+  const assignments = scanAssignments(rawLines);
+  const results: ParsedTfVariable[] = [];
+  const seen = new Set<string>();
+
+  for (const a of assignments) {
+    const fullValue = joinValue(a.valueLines);
+    const type = inferType(fullValue);
+
+    if (type === "map") {
+      const innerAssignments = scanAssignments(innerLinesOfBlock(a.valueLines));
+      for (const inner of innerAssignments) {
+        const identity = `${a.name}.${inner.name}`;
+        if (seen.has(identity)) continue;
+        seen.add(identity);
+
+        const innerValue = joinValue(inner.valueLines);
+        let innerType = inferType(innerValue);
+        if (innerType === "map") innerType = "string"; // maps imbriqués non supportés : on garde le texte brut
+
+        results.push({
+          name: inner.name,
+          type: innerType,
+          defaultValue: extractDefaultValue(innerType, innerValue),
+          description: inner.description,
+          group: a.name,
+        });
+      }
+      continue;
+    }
+
+    if (seen.has(a.name)) continue;
+    seen.add(a.name);
+
+    results.push({
+      name: a.name,
+      type,
+      defaultValue: extractDefaultValue(type, fullValue),
+      description: a.description,
+      group: "",
+    });
   }
 
   return results;

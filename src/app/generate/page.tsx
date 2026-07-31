@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { deriveRgVariablesFromServerFIS } from "@/lib/tfvars-generator";
+import { deriveRgExtractedFields } from "@/lib/tfvars-generator";
 
 interface TemplateVariable {
   id: string;
@@ -10,6 +10,7 @@ interface TemplateVariable {
   defaultValue: string | null;
   description: string | null;
   required: boolean;
+  group: string | null;
 }
 
 interface Template {
@@ -25,6 +26,7 @@ interface Row {
   defaultValue: string;
   finalValue: string;
   matched: boolean;
+  group: string;
 }
 
 interface DiffEntry {
@@ -107,6 +109,7 @@ export default function GeneratePage() {
         defaultValue: v.defaultValue || "",
         finalValue: found !== undefined ? found : v.defaultValue || "",
         matched: found !== undefined,
+        group: v.group || "",
       };
     });
 
@@ -118,19 +121,26 @@ export default function GeneratePage() {
     setRgResult(null);
 
     if (rgTemplate && selectedTemplate.category !== "RG") {
-      const derived = deriveRgVariablesFromServerFIS(data.extracted, rgTemplate.variables);
+      const derived = deriveRgExtractedFields(data.extracted);
       if (derived) {
+        const rgExtractedMap = new Map<string, string>(
+          derived.extracted.map((x) => [x.key, x.value])
+        );
         setRgInfo({
           templateId: rgTemplate.id,
           serviceFullname: derived.serviceFullname,
           env: derived.env,
-          rows: derived.variables.map((v) => ({
-            name: v.name,
-            type: v.type,
-            defaultValue: v.defaultValue || "",
-            finalValue: v.finalValue,
-            matched: true,
-          })),
+          rows: rgTemplate.variables.map((v) => {
+            const found = rgExtractedMap.get(v.name.toLowerCase());
+            return {
+              name: v.name,
+              type: v.type,
+              defaultValue: v.defaultValue || "",
+              finalValue: found !== undefined ? found : v.defaultValue || "",
+              matched: found !== undefined,
+              group: v.group || "",
+            };
+          }),
         });
       } else {
         setRgInfo(null);
@@ -172,6 +182,7 @@ export default function GeneratePage() {
           type: r.type,
           defaultValue: r.defaultValue,
           finalValue: r.finalValue,
+          group: r.group,
         })),
       }),
     });
@@ -198,6 +209,7 @@ export default function GeneratePage() {
             type: r.type,
             defaultValue: r.defaultValue,
             finalValue: r.finalValue,
+            group: r.group,
           })),
         }),
       });
@@ -278,7 +290,7 @@ export default function GeneratePage() {
               </thead>
               <tbody>
                 {rows.map((r, i) => (
-                  <tr key={r.name} className="border-t border-slate-800">
+                  <tr key={i} className="border-t border-slate-800">
                     <td className="py-2 pr-3 font-mono text-xs">{r.name}</td>
                     <td className="py-2 pr-3 text-slate-500 text-xs">{r.defaultValue || "—"}</td>
                     <td className="py-2 pr-3">
@@ -328,7 +340,7 @@ export default function GeneratePage() {
                     </thead>
                     <tbody>
                       {rgInfo.rows.map((r, i) => (
-                        <tr key={r.name} className="border-t border-slate-800">
+                        <tr key={i} className="border-t border-slate-800">
                           <td className="py-2 pr-3 font-mono text-xs">{r.name}</td>
                           <td className="py-2 pr-3 text-slate-500 text-xs">{r.defaultValue || "—"}</td>
                           <td className="py-2 pr-3">
@@ -363,8 +375,8 @@ export default function GeneratePage() {
             </a>
           </div>
           <pre className="bg-slate-950 border border-slate-800 rounded-lg p-4 text-sm overflow-x-auto font-mono">
-            {result.diff.map((d) => (
-              <div key={d.name} className={d.changed ? "text-emerald-400" : "text-slate-300"}>
+            {result.diff.map((d, i) => (
+              <div key={i} className={d.changed ? "text-emerald-400" : "text-slate-300"}>
                 {formatLine(d)}
               </div>
             ))}
@@ -387,8 +399,8 @@ export default function GeneratePage() {
             </a>
           </div>
           <pre className="bg-slate-950 border border-slate-800 rounded-lg p-4 text-sm overflow-x-auto font-mono">
-            {rgResult.diff.map((d) => (
-              <div key={d.name} className={d.changed ? "text-emerald-400" : "text-slate-300"}>
+            {rgResult.diff.map((d, i) => (
+              <div key={i} className={d.changed ? "text-emerald-400" : "text-slate-300"}>
                 {formatLine(d)}
               </div>
             ))}

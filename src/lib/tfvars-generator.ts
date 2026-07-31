@@ -3,6 +3,7 @@ export interface VariableForGeneration {
   type: string; // string | number | bool | list | map
   defaultValue: string | null;
   finalValue: string;
+  group?: string | null; // si renseigné, la variable est recomposée comme sous-clé du map <group>
 }
 
 export interface DiffEntry {
@@ -34,7 +35,7 @@ function formatValue(type: string, value: string): string {
       return `[${items.join(", ")}]`;
     }
     case "map": {
-      // format "cle=valeur, cle2=valeur2"
+      // format "cle=valeur, cle2=valeur2" (saisie manuelle d'une variable de type map)
       const pairs = trimmed
         .split(",")
         .map((s) => s.trim())
@@ -51,19 +52,37 @@ function formatValue(type: string, value: string): string {
   }
 }
 
+/**
+ * Génère le contenu .tfvars à partir des variables. Les variables partageant
+ * le même `group` (ex. Builder/Environment/Deployment avec group="tags_always")
+ * sont recomposées en un unique bloc map `tags_always = { Builder = "...", ... }`,
+ * à la position de la première variable du groupe rencontrée.
+ */
 export function buildTfvars(variables: VariableForGeneration[]): {
   content: string;
   diff: DiffEntry[];
 } {
   const lines: string[] = [];
   const diff: DiffEntry[] = [];
+  const renderedGroups = new Set<string>();
 
   for (const v of variables) {
-    const formatted = formatValue(v.type, v.finalValue);
-    lines.push(`${v.name} = ${formatted}`);
+    const group = v.group || "";
 
-    const changed =
-      (v.defaultValue ?? "").trim() !== (v.finalValue ?? "").trim();
+    if (group) {
+      if (!renderedGroups.has(group)) {
+        renderedGroups.add(group);
+        const members = variables.filter((x) => (x.group || "") === group);
+        const innerLines = members.map(
+          (m) => `  ${m.name} = ${formatValue(m.type, m.finalValue)}`
+        );
+        lines.push(`${group} = {\n${innerLines.join("\n")}\n}`);
+      }
+    } else {
+      lines.push(`${v.name} = ${formatValue(v.type, v.finalValue)}`);
+    }
+
+    const changed = (v.defaultValue ?? "").trim() !== (v.finalValue ?? "").trim();
 
     diff.push({
       name: v.name,
@@ -91,25 +110,18 @@ export function parseResourceGroupName(
   return { serviceFullname: match[1], env: match[2].toLowerCase() };
 }
 
-function buildMapString(pairs: Record<string, string | undefined>): string {
-  return Object.entries(pairs)
-    .filter(([, v]) => !!v)
-    .map(([k, v]) => `${k}=${v}`)
-    .join(", ");
-}
-
 /**
- * Déduit les valeurs des variables du template RG (env, service_fullname,
- * tags_always, tags_service, tags_rg) à partir des champs déjà extraits de la
- * fiche FIS d'un serveur (le champ "Resource Group" donne env/service_fullname,
- * les balises Builder/Environment/Deployment/ROS/Service_Name/Service_ID/
- * Description alimentent les tags). Retourne null si le champ "Resource Group"
- * de la fiche n'est pas exploitable (absent ou hors convention de nommage).
+ * Complète les paires clé/valeur extraites de la fiche FIS d'un serveur avec
+ * "env" et "service_fullname", déduits du champ "Resource Group" (ex.
+ * "rg-azdevops-ppd-001" -> env=ppd, service_fullname=azdevops). Les autres
+ * variables du template RG (Builder, Environment, Deployment, ROS,
+ * Service_Name, Service_ID, Description) matchent directement les balises de
+ * la fiche FIS, qui les expose déjà à plat sous ces mêmes noms. Retourne null
+ * si le champ "Resource Group" est absent ou hors convention de nommage.
  */
-export function deriveRgVariablesFromServerFIS(
-  extracted: { key: string; value: string }[],
-  rgTemplateVariables: { name: string; type: string; defaultValue: string | null }[]
-): { variables: VariableForGeneration[]; serviceFullname: string; env: string } | null {
+export function deriveRgExtractedFields(
+  extracted: { key: string; value: string }[]
+): { extracted: { key: string; value: string }[]; serviceFullname: string; env: string } | null {
   const map = new Map(extracted.map((e) => [e.key, e.value]));
   const rgValue = map.get("resource_group");
   if (!rgValue) return null;
@@ -117,32 +129,15 @@ export function deriveRgVariablesFromServerFIS(
   const parsed = parseResourceGroupName(rgValue);
   if (!parsed) return null;
 
-  const derived: Record<string, string> = {
+  return {
+    extracted: [
+      ...extracted,
+      { key: "env", value: parsed.env },
+      { key: "service_fullname", value: parsed.serviceFullname },
+    ],
+    serviceFullname: parsed.serviceFullname,
     env: parsed.env,
-    service_fullname: parsed.serviceFullname,
-    tags_always: buildMapString({
-      Builder: map.get("builder"),
-      Environment: map.get("environment"),
-      Deployment: map.get("deployment"),
-    }),
-    tags_service: buildMapString({
-      ROS: map.get("ros"),
-      Service_Name: map.get("service_name"),
-      Service_ID: map.get("service_id"),
-    }),
-    tags_rg: buildMapString({
-      Description: map.get("description"),
-    }),
   };
-
-  const variables = rgTemplateVariables.map((tv) => ({
-    name: tv.name,
-    type: tv.type,
-    defaultValue: tv.defaultValue,
-    finalValue: derived[tv.name] !== undefined && derived[tv.name] !== "" ? derived[tv.name] : tv.defaultValue || "",
-  }));
-
-  return { variables, serviceFullname: parsed.serviceFullname, env: parsed.env };
 }
 
 /**
@@ -155,6 +150,7 @@ export function matchVariables(
     name: string;
     type: string;
     defaultValue: string | null;
+    group?: string | null;
   }[],
   extracted: { key: string; value: string }[]
 ): VariableForGeneration[] {
@@ -167,6 +163,7 @@ export function matchVariables(
       type: tv.type,
       defaultValue: tv.defaultValue,
       finalValue: found !== undefined ? found : tv.defaultValue || "",
+      group: tv.group || "",
     };
   });
 }
