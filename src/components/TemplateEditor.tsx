@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { parseTfvars } from "@/lib/tfvars-parser";
 
 const CATEGORIES = [
   { value: "RG", label: "Resource Group" },
@@ -44,6 +45,7 @@ export default function TemplateEditor({ initial }: { initial?: TemplateFormData
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [importMessage, setImportMessage] = useState("");
 
   function updateVariable(index: number, patch: Partial<TemplateVariableForm>) {
     setForm((f) => {
@@ -65,6 +67,51 @@ export default function TemplateEditor({ initial }: { initial?: TemplateFormData
 
   function removeVariable(index: number) {
     setForm((f) => ({ ...f, variables: f.variables.filter((_, i) => i !== index) }));
+  }
+
+  async function handleImportTfvars(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+
+    const content = await file.text();
+    const parsed = parseTfvars(content);
+
+    if (parsed.length === 0) {
+      setImportMessage(`Aucune variable détectée dans « ${file.name} ».`);
+      return;
+    }
+
+    setForm((f) => {
+      const byName = new Map(f.variables.map((v) => [v.name, v]));
+      let added = 0;
+      for (const p of parsed) {
+        const existing = byName.get(p.name);
+        if (existing) {
+          byName.set(p.name, {
+            ...existing,
+            type: existing.type || p.type,
+            defaultValue: existing.defaultValue || p.defaultValue,
+            description: existing.description || p.description,
+          });
+        } else {
+          byName.set(p.name, {
+            name: p.name,
+            type: p.type,
+            defaultValue: p.defaultValue,
+            description: p.description,
+            required: false,
+          });
+          added++;
+        }
+      }
+      setImportMessage(
+        `${parsed.length} variable(s) détectée(s) dans « ${file.name} » (${added} ajoutée(s), ${
+          parsed.length - added
+        } déjà présente(s) mise(s) à jour).`
+      );
+      return { ...f, variables: Array.from(byName.values()) };
+    });
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -149,14 +196,27 @@ export default function TemplateEditor({ initial }: { initial?: TemplateFormData
       </div>
 
       <div className="card space-y-3">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between flex-wrap gap-2">
           <h2 className="font-semibold">
             Variables ({form.variables.length})
           </h2>
-          <button type="button" onClick={addVariable} className="btn-secondary text-sm">
-            + Ajouter une variable
-          </button>
+          <div className="flex items-center gap-3">
+            <label className="btn-secondary text-sm cursor-pointer">
+              Importer un .tfvars (détection auto)
+              <input
+                type="file"
+                accept=".tfvars,.tf,.txt"
+                onChange={handleImportTfvars}
+                className="hidden"
+              />
+            </label>
+            <button type="button" onClick={addVariable} className="btn-secondary text-sm">
+              + Ajouter une variable
+            </button>
+          </div>
         </div>
+
+        {importMessage && <p className="text-xs text-slate-400">{importMessage}</p>}
 
         {form.variables.length === 0 && (
           <p className="text-slate-500 text-sm">
