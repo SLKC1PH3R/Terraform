@@ -95,6 +95,10 @@ function contentToLines(content: string, diff: DiffEntry[]): TfvarsLine[] {
       lines.push({ kind: "blank" });
       continue;
     }
+    if (trimmed.startsWith("#") || trimmed.startsWith("//")) {
+      lines.push({ kind: "comment", text: trimmed });
+      continue;
+    }
     if (trimmed.endsWith("= {")) {
       lines.push({ kind: "block", text: trimmed, indent: depth * 20 });
       depth++;

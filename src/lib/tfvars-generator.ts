@@ -52,18 +52,24 @@ function formatValue(type: string, value: string): string {
   }
 }
 
+function computeDiff(variables: VariableForGeneration[]): DiffEntry[] {
+  return variables.map((v) => ({
+    name: v.name,
+    defaultValue: v.defaultValue,
+    finalValue: v.finalValue,
+    changed: (v.defaultValue ?? "").trim() !== (v.finalValue ?? "").trim(),
+  }));
+}
+
 /**
- * Génère le contenu .tfvars à partir des variables. Les variables partageant
- * le même `group` (ex. Builder/Environment/Deployment avec group="tags_always")
- * sont recomposées en un unique bloc map `tags_always = { Builder = "...", ... }`,
- * à la position de la première variable du groupe rencontrée.
+ * Génère le contenu .tfvars "à plat" à partir des variables, sans référence.
+ * Les variables partageant le même `group` (ex. Builder/Environment/Deployment
+ * avec group="tags_always") sont recomposées en un unique bloc map
+ * `tags_always = { Builder = "...", ... }`, à la position de la première
+ * variable du groupe rencontrée.
  */
-export function buildTfvars(variables: VariableForGeneration[]): {
-  content: string;
-  diff: DiffEntry[];
-} {
+function buildFlatTfvars(variables: VariableForGeneration[]): string {
   const lines: string[] = [];
-  const diff: DiffEntry[] = [];
   const renderedGroups = new Set<string>();
 
   for (const v of variables) {
@@ -81,18 +87,107 @@ export function buildTfvars(variables: VariableForGeneration[]): {
     } else {
       lines.push(`${v.name} = ${formatValue(v.type, v.finalValue)}`);
     }
-
-    const changed = (v.defaultValue ?? "").trim() !== (v.finalValue ?? "").trim();
-
-    diff.push({
-      name: v.name,
-      defaultValue: v.defaultValue,
-      finalValue: v.finalValue,
-      changed,
-    });
   }
 
-  return { content: lines.join("\n") + "\n", diff };
+  return lines.join("\n") + "\n";
+}
+
+/**
+ * Génère le .tfvars en réutilisant le texte de référence du template
+ * (`tfContent`) comme gabarit : chaque assignation `key = value` (au premier
+ * niveau ou à l'intérieur d'un bloc map) dont le nom correspond à une
+ * variable voit uniquement sa valeur remplacée — commentaires, lignes vides
+ * et structure du fichier d'origine restent intacts. Les variables sans
+ * correspondance dans le texte de référence sont ajoutées à la fin (rendu à
+ * plat) pour ne rien perdre.
+ */
+function buildTfvarsFromReference(tfContent: string, variables: VariableForGeneration[]): string {
+  const byTop = new Map<string, VariableForGeneration>();
+  const byGroup = new Map<string, VariableForGeneration>();
+  for (const v of variables) {
+    if (v.group) byGroup.set(`${v.group}::${v.name}`, v);
+    else byTop.set(v.name, v);
+  }
+
+  const usedTop = new Set<string>();
+  const usedGroup = new Set<string>();
+
+  const lines = tfContent.split(/\r?\n/);
+  const out: string[] = [];
+  let currentGroup: string | null = null;
+
+  const assignPattern = /^(\s*)([a-zA-Z_][\w-]*)(\s*=\s*)(.*)$/;
+
+  for (const line of lines) {
+    if (currentGroup === null) {
+      const openMatch = line.match(/^(\s*)([a-zA-Z_][\w-]*)\s*=\s*\{\s*$/);
+      if (openMatch) {
+        currentGroup = openMatch[2];
+        out.push(line);
+        continue;
+      }
+
+      const assignMatch = line.match(assignPattern);
+      if (assignMatch) {
+        const [, indent, key, sep] = assignMatch;
+        const v = byTop.get(key);
+        if (v) {
+          usedTop.add(key);
+          out.push(`${indent}${key}${sep}${formatValue(v.type, v.finalValue)}`);
+          continue;
+        }
+      }
+      out.push(line);
+      continue;
+    }
+
+    if (/^\s*\}\s*$/.test(line)) {
+      currentGroup = null;
+      out.push(line);
+      continue;
+    }
+
+    const assignMatch = line.match(assignPattern);
+    if (assignMatch) {
+      const [, indent, key, sep] = assignMatch;
+      const gkey = `${currentGroup}::${key}`;
+      const v = byGroup.get(gkey);
+      if (v) {
+        usedGroup.add(gkey);
+        out.push(`${indent}${key}${sep}${formatValue(v.type, v.finalValue)}`);
+        continue;
+      }
+    }
+    out.push(line);
+  }
+
+  const leftovers = variables.filter((v) =>
+    v.group ? !usedGroup.has(`${v.group}::${v.name}`) : !usedTop.has(v.name)
+  );
+
+  let content = out.join("\n");
+  if (!content.endsWith("\n")) content += "\n";
+  if (leftovers.length) content += "\n" + buildFlatTfvars(leftovers);
+
+  return content;
+}
+
+/**
+ * Génère le contenu .tfvars à partir des variables. Si le template a un
+ * `tfContent` de référence, il est utilisé comme gabarit (commentaires et
+ * structure préservés, valeurs substituées) ; sinon un rendu "à plat" est
+ * généré directement depuis les variables.
+ */
+export function buildTfvars(
+  variables: VariableForGeneration[],
+  tfContent?: string | null
+): { content: string; diff: DiffEntry[] } {
+  const diff = computeDiff(variables);
+  const content =
+    tfContent && tfContent.trim()
+      ? buildTfvarsFromReference(tfContent, variables)
+      : buildFlatTfvars(variables);
+  return { content, diff };
 }
 
 const RG_NAME_PATTERN = /^rg-(.+)-(prod|ppd|qual|sdbx|homl)-\d+$/i;

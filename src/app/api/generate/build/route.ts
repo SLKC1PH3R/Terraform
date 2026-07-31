@@ -14,7 +14,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Paramètres manquants" }, { status: 400 });
   }
 
-  const { content, diff } = buildTfvars(variables);
+  const template = await prisma.template.findUnique({
+    where: { id: templateId },
+    select: { tfContent: true },
+  });
+
+  const { content, diff } = buildTfvars(variables, template?.tfContent);
 
   const generation = await prisma.generation.create({
     data: {
