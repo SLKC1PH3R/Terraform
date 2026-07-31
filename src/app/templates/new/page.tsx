@@ -1,10 +1,5 @@
-import TemplateEditor from "@/components/TemplateEditor";
+import { redirect } from "next/navigation";
 
-export default function NewTemplatePage() {
-  return (
-    <div className="space-y-4">
-      <h1 className="text-xl font-bold">Nouveau template</h1>
-      <TemplateEditor />
-    </div>
-  );
+export default function NewTemplateRedirect() {
+  redirect("/?view=editor");
 }
