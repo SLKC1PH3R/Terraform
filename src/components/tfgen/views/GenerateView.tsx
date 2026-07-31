@@ -180,8 +180,15 @@ export default function GenerateView({
 
     setFileName(data.fileName);
 
+    // Si la fiche contient un champ "Resource Group" exploitable, on en déduit
+    // env/service_fullname et on les ajoute aux paires extraites — que le
+    // template sélectionné soit le RG lui-même (générés directement) ou un
+    // autre template (utilisés pour le panneau RG secondaire ci-dessous).
+    const derived = deriveRgExtractedFields(data.extracted);
+    const effectiveExtracted = derived ? derived.extracted : data.extracted;
+
     const extractedMap = new Map<string, string>(
-      data.extracted.map((x: { key: string; value: string }) => [x.key, x.value])
+      effectiveExtracted.map((x: { key: string; value: string }) => [x.key, x.value])
     );
 
     const newRows: Row[] = selectedTemplate.variables.map((v) => {
@@ -205,7 +212,6 @@ export default function GenerateView({
     setRgResult(null);
 
     if (rgTemplate && selectedTemplate.category !== "RG") {
-      const derived = deriveRgExtractedFields(data.extracted);
       if (derived) {
         const rgExtractedMap = new Map<string, string>(derived.extracted.map((x) => [x.key, x.value]));
         setRgInfo({
