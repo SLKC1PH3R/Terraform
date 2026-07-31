@@ -11,6 +11,7 @@ import {
   VariableSection,
 } from "../components";
 import { deriveRgExtractedFields } from "@/lib/tfvars-generator";
+import { isStorageAccountTemplate } from "@/lib/storage-account-generator";
 import { ApiTemplate, ApiTemplateVariable, CATEGORY_LABELS, toDesignCategory } from "./shared";
 import { buildSections, contentToLines, deriveFileName, rowState, type BuildResult, type Row } from "./tfvarsRender";
 
@@ -105,6 +106,7 @@ export default function GenerateView({
   const [openRgSections, setOpenRgSections] = useState<Record<string, boolean>>({});
 
   const selectedTemplate = templates.find((t) => t.id === templateId);
+  const isStorageAccount = isStorageAccountTemplate(selectedTemplate?.tfContent);
 
   const sections = useMemo(
     () => (selectedTemplate ? buildSections(selectedTemplate.name, selectedTemplate.category, rows) : []),
@@ -245,6 +247,43 @@ export default function GenerateView({
 
     setBatchResults(results);
     setBatchRunning(false);
+    setStep(4);
+    onGenerated?.();
+  }
+
+  /** Templates "Storage Account" (gabarit locals { ... SA_list = [...] } ) :
+   * pas de table de variables à revoir, la génération part directement des
+   * paires extraites de la fiche (listes de conteneurs/partages/etc. gérées
+   * côté serveur par storage-account-generator.ts). */
+  async function proceedStorageAccount() {
+    if (!selectedTemplate || uploadedFiles.length !== 1) return;
+    setGenerating(true);
+    setError("");
+
+    const uf = uploadedFiles[0];
+    const sourceFileBase64 = await fileToBase64(uf.file);
+
+    const res = await fetch("/api/generate/build", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        templateId,
+        fileName: uf.fileName,
+        sourceFileBase64,
+        sourceFileMime: uf.file.type || undefined,
+        extracted: uf.extracted,
+      }),
+    });
+
+    const data = await res.json();
+    setGenerating(false);
+
+    if (!res.ok) {
+      setError(data.error || "Erreur lors de la génération");
+      return;
+    }
+
+    setResult(data);
     setStep(4);
     onGenerated?.();
   }
@@ -435,7 +474,7 @@ export default function GenerateView({
                       padding: "1px 6px",
                     }}
                   >
-                    VM{i + 1}
+                    {isStorageAccount ? "Fiche" : `VM${i + 1}`}
                   </span>
                   <span style={{ fontFamily: "monospace", fontSize: 12.5, color: "#E5E5E5" }}>{uf.fileName}</span>
                   <button
@@ -451,7 +490,7 @@ export default function GenerateView({
             </div>
           )}
 
-          {uploadedFiles.length >= 2 && (
+          {!isStorageAccount && uploadedFiles.length >= 2 && (
             <p style={{ color: "#A3A3A3", fontSize: 12.5 }}>
               {uploadedFiles.length} fiches importées : générez un .tfvars séparé par fiche, ou fusionnez-les en un
               seul .tfvars (la 1ère fiche garde les noms de variables tels quels, les suivantes sont préfixées
@@ -459,21 +498,37 @@ export default function GenerateView({
             </p>
           )}
 
+          {isStorageAccount && uploadedFiles.length > 1 && (
+            <p style={{ color: "#A3A3A3", fontSize: 12.5 }}>
+              Ce template génère un seul compte de stockage par fiche : seule la 1ère fiche importée sera utilisée.
+            </p>
+          )}
+
           <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap" }}>
             <Button onClick={() => setStep(1)}>Retour</Button>
-            {uploadedFiles.length === 1 && (
-              <Button variant="primary" onClick={proceedSingle}>
-                Continuer
-              </Button>
-            )}
-            {uploadedFiles.length >= 2 && (
+            {isStorageAccount ? (
+              uploadedFiles.length >= 1 && (
+                <Button variant="generate" onClick={proceedStorageAccount} disabled={generating}>
+                  {generating ? "Génération..." : "Générer le .tfvars"}
+                </Button>
+              )
+            ) : (
               <>
-                <Button onClick={proceedBatch} disabled={batchRunning}>
-                  {batchRunning ? "Génération..." : `Générer ${uploadedFiles.length} .tfvars séparés`}
-                </Button>
-                <Button variant="generate" onClick={proceedMerge}>
-                  Fusionner en un seul .tfvars (VM1, VM2...)
-                </Button>
+                {uploadedFiles.length === 1 && (
+                  <Button variant="primary" onClick={proceedSingle}>
+                    Continuer
+                  </Button>
+                )}
+                {uploadedFiles.length >= 2 && (
+                  <>
+                    <Button onClick={proceedBatch} disabled={batchRunning}>
+                      {batchRunning ? "Génération..." : `Générer ${uploadedFiles.length} .tfvars séparés`}
+                    </Button>
+                    <Button variant="generate" onClick={proceedMerge}>
+                      Fusionner en un seul .tfvars (VM1, VM2...)
+                    </Button>
+                  </>
+                )}
               </>
             )}
           </div>
