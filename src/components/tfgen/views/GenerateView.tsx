@@ -11,7 +11,7 @@ import {
   VariableSection,
 } from "../components";
 import { deriveRgExtractedFields } from "@/lib/tfvars-generator";
-import { ApiTemplate, CATEGORY_LABELS, toDesignCategory } from "./shared";
+import { ApiTemplate, ApiTemplateVariable, CATEGORY_LABELS, toDesignCategory } from "./shared";
 import { buildSections, contentToLines, deriveFileName, rowState, type BuildResult, type Row } from "./tfvarsRender";
 
 function fileToBase64(file: File): Promise<string> {
@@ -33,6 +33,47 @@ interface RgInfo {
   rows: Row[];
 }
 
+interface UploadedFile {
+  file: File;
+  fileName: string;
+  extracted: { key: string; value: string }[];
+  rgDerived: { serviceFullname: string; env: string } | null;
+}
+
+interface BatchResultEntry {
+  fileName: string;
+  result?: BuildResult;
+  error?: string;
+}
+
+/** Fait correspondre les valeurs extraites d'une fiche aux variables du
+ * template. Avec un `prefix` (ex. "vm2_"), le nom et le groupe de chaque
+ * variable sont préfixés, pour fusionner plusieurs ressources du même type
+ * dans un seul .tfvars sans collision. */
+function matchRows(
+  variables: ApiTemplateVariable[],
+  extracted: { key: string; value: string }[],
+  prefix = ""
+): Row[] {
+  const extractedMap = new Map(extracted.map((x) => [x.key, x.value]));
+  return variables.map((v) => {
+    const found = extractedMap.get(v.name.toLowerCase());
+    // Le préfixe s'applique au nom de la variable elle-même (ex. vm2_ip_address)
+    // ou, pour une variable de map, au nom du groupe (ex. vm2_tags_always) —
+    // pas aux deux, sinon la clé interne du map serait doublement préfixée.
+    const group = v.group ? (prefix ? `${prefix}${v.group}` : v.group) : "";
+    const name = v.group ? v.name : prefix ? `${prefix}${v.name}` : v.name;
+    return {
+      name,
+      type: v.type,
+      defaultValue: v.defaultValue || "",
+      finalValue: found !== undefined ? found : v.defaultValue || "",
+      matched: found !== undefined,
+      group,
+    };
+  });
+}
+
 export default function GenerateView({
   templates,
   initialTemplateId,
@@ -51,6 +92,10 @@ export default function GenerateView({
   const [error, setError] = useState("");
   const [generating, setGenerating] = useState(false);
   const [result, setResult] = useState<BuildResult | null>(null);
+
+  const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
+  const [batchRunning, setBatchRunning] = useState(false);
+  const [batchResults, setBatchResults] = useState<BatchResultEntry[]>([]);
 
   const [rgInfo, setRgInfo] = useState<RgInfo | null>(null);
   const [createRg, setCreateRg] = useState(false);
@@ -73,7 +118,35 @@ export default function GenerateView({
   const modifiedCount = rows.filter((r) => rowState(r) === "modified").length;
   const defaultCount = rows.length - modifiedCount;
 
-  async function handleFileUpload(file: File) {
+  function resetUploadState() {
+    setUploadedFiles([]);
+    setBatchResults([]);
+    setRows([]);
+    setResult(null);
+    setRgInfo(null);
+    setRgResult(null);
+    setCreateRg(false);
+    setError("");
+  }
+
+  function setupRgInfo(uf: UploadedFile) {
+    const rgTemplate = templates.find((t) => t.category === "RG");
+    setCreateRg(false);
+    setRgResult(null);
+
+    if (rgTemplate && selectedTemplate && selectedTemplate.category !== "RG" && uf.rgDerived) {
+      setRgInfo({
+        templateId: rgTemplate.id,
+        serviceFullname: uf.rgDerived.serviceFullname,
+        env: uf.rgDerived.env,
+        rows: matchRows(rgTemplate.variables, uf.extracted),
+      });
+    } else {
+      setRgInfo(null);
+    }
+  }
+
+  async function handleAddFile(file: File) {
     if (!selectedTemplate) return;
     setUploading(true);
     setError("");
@@ -90,65 +163,90 @@ export default function GenerateView({
       return;
     }
 
-    setFileName(data.fileName);
-    setSourceFile(file);
-
     // Si la fiche contient un champ "Resource Group" exploitable, on en déduit
     // env/service_fullname et on les ajoute aux paires extraites — que le
     // template sélectionné soit le RG lui-même (générés directement) ou un
-    // autre template (utilisés pour le panneau RG secondaire ci-dessous).
+    // autre template (utilisés pour le panneau RG secondaire).
     const derived = deriveRgExtractedFields(data.extracted);
-    const effectiveExtracted = derived ? derived.extracted : data.extracted;
 
-    const extractedMap = new Map<string, string>(
-      effectiveExtracted.map((x: { key: string; value: string }) => [x.key, x.value])
-    );
+    setUploadedFiles((prev) => [
+      ...prev,
+      {
+        file,
+        fileName: data.fileName,
+        extracted: derived ? derived.extracted : data.extracted,
+        rgDerived: derived ? { serviceFullname: derived.serviceFullname, env: derived.env } : null,
+      },
+    ]);
+  }
 
-    const newRows: Row[] = selectedTemplate.variables.map((v) => {
-      const found = extractedMap.get(v.name.toLowerCase());
-      return {
-        name: v.name,
-        type: v.type,
-        defaultValue: v.defaultValue || "",
-        finalValue: found !== undefined ? found : v.defaultValue || "",
-        matched: found !== undefined,
-        group: v.group || "",
-      };
-    });
+  function removeUploadedFile(index: number) {
+    setUploadedFiles((prev) => prev.filter((_, i) => i !== index));
+  }
 
-    setRows(newRows);
+  function proceedSingle() {
+    if (!selectedTemplate || uploadedFiles.length === 0) return;
+    const uf = uploadedFiles[0];
+    setFileName(uf.fileName);
+    setSourceFile(uf.file);
+    setRows(matchRows(selectedTemplate.variables, uf.extracted));
     setOpenSections({});
     setStep(3);
+    setupRgInfo(uf);
+  }
 
-    const rgTemplate = templates.find((t) => t.category === "RG");
-    setCreateRg(false);
-    setRgResult(null);
+  function proceedMerge() {
+    if (!selectedTemplate || uploadedFiles.length < 2) return;
+    const combined: Row[] = [];
+    uploadedFiles.forEach((uf, i) => {
+      const prefix = i === 0 ? "" : `vm${i + 1}_`;
+      combined.push(...matchRows(selectedTemplate.variables, uf.extracted, prefix));
+    });
+    setRows(combined);
+    setFileName(uploadedFiles.map((f) => f.fileName).join(" + "));
+    setSourceFile(uploadedFiles[0].file);
+    setOpenSections({});
+    setStep(3);
+    setupRgInfo(uploadedFiles[0]);
+  }
 
-    if (rgTemplate && selectedTemplate.category !== "RG") {
-      if (derived) {
-        const rgExtractedMap = new Map<string, string>(derived.extracted.map((x) => [x.key, x.value]));
-        setRgInfo({
-          templateId: rgTemplate.id,
-          serviceFullname: derived.serviceFullname,
-          env: derived.env,
-          rows: rgTemplate.variables.map((v) => {
-            const found = rgExtractedMap.get(v.name.toLowerCase());
-            return {
-              name: v.name,
-              type: v.type,
-              defaultValue: v.defaultValue || "",
-              finalValue: found !== undefined ? found : v.defaultValue || "",
-              matched: found !== undefined,
-              group: v.group || "",
-            };
-          }),
-        });
-      } else {
-        setRgInfo(null);
-      }
-    } else {
-      setRgInfo(null);
+  async function proceedBatch() {
+    if (!selectedTemplate || uploadedFiles.length < 2) return;
+    setBatchRunning(true);
+    setError("");
+
+    const results: BatchResultEntry[] = [];
+
+    for (const uf of uploadedFiles) {
+      const rowsForFile = matchRows(selectedTemplate.variables, uf.extracted);
+      const sourceFileBase64 = await fileToBase64(uf.file);
+
+      const res = await fetch("/api/generate/build", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          templateId,
+          fileName: uf.fileName,
+          sourceFileBase64,
+          sourceFileMime: uf.file.type || undefined,
+          variables: rowsForFile.map((r) => ({
+            name: r.name,
+            type: r.type,
+            defaultValue: r.defaultValue,
+            finalValue: r.finalValue,
+            group: r.group,
+          })),
+        }),
+      });
+
+      const data = await res.json();
+      results.push(res.ok ? { fileName: uf.fileName, result: data } : { fileName: uf.fileName, error: data.error });
     }
+
+    setBatchResults(results);
+    setBatchRunning(false);
+    setStep(4);
+    onGenerated?.();
   }
 
   function updateRowByIdentity(group: string, name: string, value: string) {
@@ -240,9 +338,15 @@ export default function GenerateView({
         current={step}
         steps={[
           { label: "Template", hint: selectedTemplate?.name || "—" },
-          { label: "Fiche Excel", hint: fileName || "—" },
+          {
+            label: "Fiche(s) Excel",
+            hint: uploadedFiles.length > 1 ? `${uploadedFiles.length} fiches` : fileName || "—",
+          },
           { label: "Revue des valeurs", hint: rows.length ? `${modifiedCount} / ${rows.length} modifiées` : "—" },
-          { label: "Résultat", hint: result ? "généré" : "—" },
+          {
+            label: "Résultat",
+            hint: result ? "généré" : batchResults.length ? `${batchResults.length} générés` : "—",
+          },
         ]}
       />
 
@@ -255,7 +359,10 @@ export default function GenerateView({
               <button
                 key={t.id}
                 type="button"
-                onClick={() => setTemplateId(t.id)}
+                onClick={() => {
+                  setTemplateId(t.id);
+                  resetUploadState();
+                }}
                 style={{
                   textAlign: "left",
                   font: "inherit",
@@ -292,10 +399,83 @@ export default function GenerateView({
 
       {step === 2 && selectedTemplate && (
         <>
-          <UploadZone onPick={handleFileUpload} />
+          <UploadZone
+            onPick={handleAddFile}
+            hint="Formats .xlsx et .xlsm · plusieurs fiches possibles (une par VM à générer ou fusionner)."
+          />
           {uploading && <p style={{ color: "#A3A3A3", fontSize: 13 }}>Lecture du fichier...</p>}
-          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+
+          {uploadedFiles.length > 0 && (
+            <div
+              style={{
+                borderRadius: 12,
+                background: "#171717",
+                boxShadow: "0 0 0 1px #262626",
+                overflow: "hidden",
+              }}
+            >
+              {uploadedFiles.map((uf, i) => (
+                <div
+                  key={i}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    padding: "10px 14px",
+                    borderBottom: i < uploadedFiles.length - 1 ? "1px solid #262626" : undefined,
+                  }}
+                >
+                  <span
+                    style={{
+                      fontFamily: "monospace",
+                      fontSize: 10.5,
+                      color: "#D8B9FF",
+                      border: "1px solid #4A2A6B",
+                      borderRadius: 4,
+                      padding: "1px 6px",
+                    }}
+                  >
+                    VM{i + 1}
+                  </span>
+                  <span style={{ fontFamily: "monospace", fontSize: 12.5, color: "#E5E5E5" }}>{uf.fileName}</span>
+                  <button
+                    type="button"
+                    onClick={() => removeUploadedFile(i)}
+                    style={{ marginLeft: "auto", background: "none", border: 0, color: "#737373", cursor: "pointer", fontSize: 16, lineHeight: 1 }}
+                    title="Retirer cette fiche"
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {uploadedFiles.length >= 2 && (
+            <p style={{ color: "#A3A3A3", fontSize: 12.5 }}>
+              {uploadedFiles.length} fiches importées : générez un .tfvars séparé par fiche, ou fusionnez-les en un
+              seul .tfvars (la 1ère fiche garde les noms de variables tels quels, les suivantes sont préfixées
+              vm2_, vm3_, ...).
+            </p>
+          )}
+
+          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap" }}>
             <Button onClick={() => setStep(1)}>Retour</Button>
+            {uploadedFiles.length === 1 && (
+              <Button variant="primary" onClick={proceedSingle}>
+                Continuer
+              </Button>
+            )}
+            {uploadedFiles.length >= 2 && (
+              <>
+                <Button onClick={proceedBatch} disabled={batchRunning}>
+                  {batchRunning ? "Génération..." : `Générer ${uploadedFiles.length} .tfvars séparés`}
+                </Button>
+                <Button variant="generate" onClick={proceedMerge}>
+                  Fusionner en un seul .tfvars (VM1, VM2...)
+                </Button>
+              </>
+            )}
           </div>
         </>
       )}
@@ -371,6 +551,53 @@ export default function GenerateView({
             </Button>
           </div>
         </>
+      )}
+
+      {step === 4 && batchResults.length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <h2 style={{ fontSize: 18, margin: 0, fontWeight: 600 }}>
+            Résultats — {batchResults.length} fiches
+          </h2>
+          <div
+            style={{
+              borderRadius: 12,
+              background: "#171717",
+              boxShadow: "0 0 0 1px #262626",
+              overflow: "hidden",
+            }}
+          >
+            {batchResults.map((br, i) => (
+              <div
+                key={i}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  padding: "11px 16px",
+                  borderBottom: i < batchResults.length - 1 ? "1px solid #262626" : undefined,
+                }}
+              >
+                <span style={{ fontFamily: "monospace", fontSize: 12.5, color: "#E5E5E5" }}>{br.fileName}</span>
+                <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
+                  {br.result ? (
+                    <>
+                      <StatusPill tone="ok">généré</StatusPill>
+                      <Button
+                        size="sm"
+                        variant="primary"
+                        onClick={() => window.open(`/api/generate/${br.result!.id}/download`, "_blank")}
+                      >
+                        Télécharger
+                      </Button>
+                    </>
+                  ) : (
+                    <StatusPill tone="error">{br.error || "erreur"}</StatusPill>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
 
       {step === 4 && result && (
