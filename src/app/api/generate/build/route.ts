@@ -4,10 +4,12 @@ import { buildTfvars, VariableForGeneration } from "@/lib/tfvars-generator";
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { templateId, fileName, variables } = body as {
+  const { templateId, fileName, variables, sourceFileBase64, sourceFileMime } = body as {
     templateId: string;
     fileName: string;
     variables: VariableForGeneration[];
+    sourceFileBase64?: string;
+    sourceFileMime?: string;
   };
 
   if (!templateId || !variables) {
@@ -27,6 +29,8 @@ export async function POST(req: NextRequest) {
       fileName: fileName || "fiche.xlsx",
       resultTfvars: content,
       diffJson: JSON.stringify(diff),
+      sourceFileData: sourceFileBase64 ? Buffer.from(sourceFileBase64, "base64") : undefined,
+      sourceFileMime: sourceFileBase64 ? sourceFileMime || "application/octet-stream" : undefined,
     },
   });
 

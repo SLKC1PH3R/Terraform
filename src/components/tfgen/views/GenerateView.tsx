@@ -16,6 +16,18 @@ import {
 import { deriveRgExtractedFields } from "@/lib/tfvars-generator";
 import { ApiTemplate, CATEGORY_LABELS, toDesignCategory } from "./shared";
 
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      resolve(result.slice(result.indexOf(",") + 1));
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
 interface Row {
   name: string;
   type: string;
@@ -83,6 +95,13 @@ function buildSections(title: string, dbCategory: string, rows: Row[]): Variable
   return sections;
 }
 
+/** Même règle que /api/generate/[id]/download : nommé d'après la variable "env" si présente. */
+function deriveFileName(content: string, fallback: string): string {
+  const envMatch = content.match(/^env\s*=\s*"([^"]*)"\s*$/m);
+  const base = (envMatch?.[1] || fallback).replace(/[^a-zA-Z0-9-_]/g, "_");
+  return envMatch ? `${base}.tfvars` : `${base}.auto.tfvars`;
+}
+
 function contentToLines(content: string, diff: DiffEntry[]): TfvarsLine[] {
   const changedNames = new Set(diff.filter((d) => d.changed).map((d) => d.name));
   const rawLines = content.split("\n").filter((l, i, arr) => !(i === arr.length - 1 && l === ""));
@@ -134,6 +153,7 @@ export default function GenerateView({
   const [templateId, setTemplateId] = useState(initialTemplateId || "");
   const [step, setStep] = useState<1 | 2 | 3 | 4>(initialTemplateId ? 2 : 1);
   const [fileName, setFileName] = useState("");
+  const [sourceFile, setSourceFile] = useState<File | null>(null);
   const [rows, setRows] = useState<Row[]>([]);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
@@ -179,6 +199,7 @@ export default function GenerateView({
     }
 
     setFileName(data.fileName);
+    setSourceFile(file);
 
     // Si la fiche contient un champ "Resource Group" exploitable, on en déduit
     // env/service_fullname et on les ajoute aux paires extraites — que le
@@ -257,12 +278,17 @@ export default function GenerateView({
     setGenerating(true);
     setError("");
 
+    const sourceFileBase64 = sourceFile ? await fileToBase64(sourceFile) : undefined;
+    const sourceFileMime = sourceFile?.type || undefined;
+
     const res = await fetch("/api/generate/build", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         templateId,
         fileName,
+        sourceFileBase64,
+        sourceFileMime,
         variables: rows.map((r) => ({
           name: r.name,
           type: r.type,
@@ -290,6 +316,8 @@ export default function GenerateView({
         body: JSON.stringify({
           templateId: rgInfo.templateId,
           fileName,
+          sourceFileBase64,
+          sourceFileMime,
           variables: rgInfo.rows.map((r) => ({
             name: r.name,
             type: r.type,
@@ -465,7 +493,7 @@ export default function GenerateView({
           </div>
           <TfvarsPreview
             lines={contentToLines(result.content, result.diff)}
-            fileName={`${selectedTemplate?.name || "template"}.tfvars`}
+            fileName={deriveFileName(result.content, selectedTemplate?.name || "template")}
             meta={`généré depuis ${selectedTemplate?.name || ""}`}
           />
 
@@ -483,7 +511,7 @@ export default function GenerateView({
               </div>
               <TfvarsPreview
                 lines={contentToLines(rgResult.content, rgResult.diff)}
-                fileName="rg.tfvars"
+                fileName={deriveFileName(rgResult.content, "rg")}
                 meta="resource group"
               />
             </>

@@ -56,12 +56,10 @@ export interface ApiTemplate {
 
 export interface ApiGeneration {
   id: string;
-  templateId: string;
   fileName: string;
-  resultTfvars: string;
-  diffJson: string;
   createdAt: string;
-  template: ApiTemplate;
+  hasSourceFile: boolean;
+  template: { id: string; name: string; category: string };
 }
 
 export function formatRelative(iso: string): string {

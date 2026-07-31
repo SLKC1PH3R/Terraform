@@ -7,9 +7,10 @@ import { activeNavGradient, color, font } from "./tokens";
 import DashboardView from "./views/DashboardView";
 import GenerateView from "./views/GenerateView";
 import EditorView from "./views/EditorView";
+import HistoryView from "./views/HistoryView";
 import { ApiGeneration, ApiTemplate } from "./views/shared";
 
-type View = "dashboard" | "generate" | "editor";
+type View = "dashboard" | "generate" | "editor" | "history";
 
 const NAV: { view: View; label: string; icon: string }[] = [
   {
@@ -26,6 +27,11 @@ const NAV: { view: View; label: string; icon: string }[] = [
     view: "editor",
     label: "Éditeur de template",
     icon: "M227.31,73.37,182.63,28.68a16,16,0,0,0-22.63,0L36.69,152A15.86,15.86,0,0,0,32,163.31V208a16,16,0,0,0,16,16H92.69A15.86,15.86,0,0,0,104,219.31L227.31,96a16,16,0,0,0,0-22.63ZM92.69,208H48V163.31l88-88L180.69,120ZM192,108.68,147.31,64l24-24L216,84.68Z",
+  },
+  {
+    view: "history",
+    label: "Historique",
+    icon: "M128,24A104,104,0,1,0,232,128,104.12,104.12,0,0,0,128,24Zm0,192a88,88,0,1,1,88-88A88.1,88.1,0,0,1,128,216Zm64-88a8,8,0,0,1-8,8H128a8,8,0,0,1-8-8V72a8,8,0,0,1,16,0v48h48A8,8,0,0,1,192,128Z",
   },
 ];
 
@@ -238,6 +244,10 @@ export default function AppShell() {
                 setView("dashboard");
               }}
             />
+          )}
+
+          {view === "history" && (
+            <HistoryView generations={generations} loading={loading} onDeleted={refetchAll} />
           )}
         </div>
       </main>

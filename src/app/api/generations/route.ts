@@ -5,9 +5,24 @@ export const dynamic = "force-dynamic";
 
 export async function GET() {
   const generations = await prisma.generation.findMany({
-    include: { template: true },
+    select: {
+      id: true,
+      fileName: true,
+      createdAt: true,
+      sourceFileMime: true,
+      template: { select: { id: true, name: true, category: true } },
+    },
     orderBy: { createdAt: "desc" },
-    take: 50,
+    take: 100,
   });
-  return NextResponse.json(generations);
+
+  const result = generations.map((g) => ({
+    id: g.id,
+    fileName: g.fileName,
+    createdAt: g.createdAt,
+    template: g.template,
+    hasSourceFile: !!g.sourceFileMime,
+  }));
+
+  return NextResponse.json(result);
 }

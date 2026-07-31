@@ -43,11 +43,13 @@ model TemplateVariable {
 }
 
 model Generation {
-  id           String   @id @default(cuid())
-  templateId   String
-  template     Template @relation(fields: [templateId], references: [id])
-  fileName     String
-  resultTfvars String   @db.Text
-  diffJson     String   @db.Text
-  createdAt    DateTime @default(now())
+  id             String   @id @default(cuid())
+  templateId     String
+  template       Template @relation(fields: [templateId], references: [id])
+  fileName       String
+  resultTfvars   String   @db.Text
+  diffJson       String   @db.Text
+  sourceFileData Bytes? // fiche FIS importée (bytes bruts), pour re-téléchargement depuis l'historique
+  sourceFileMime String?
+  createdAt      DateTime @default(now())
 }
