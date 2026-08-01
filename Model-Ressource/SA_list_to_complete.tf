@@ -86,11 +86,11 @@ locals {
       # Subnets allowed to access the storage account
       ACL_subnets = [
         # jumpbox subnet (mandatory)
-        # {
-        #   name                 = "snet-prod-westeurope-jumpbox-001"
-        #   virtual_network_name = "vnet-prod-westeurope-jumpbox-001"
-        #   resource_group_name  = "rg-network-prod-001"
-        # }
+        {
+          name                 = "snet-prod-westeurope-jumpbox-001"
+          virtual_network_name = "vnet-prod-westeurope-jumpbox-001"
+          resource_group_name  = "rg-network-prod-001"
+        }
         # backup subnet (mandatory)
         {
           name                 = "snet-prod-westeurope-backup-001"
@@ -102,16 +102,16 @@ locals {
       identity = "None" # possibles values "SystemAssigned" or "UserAssigned" or "None"
       # List of user-assigned managed identity that we want to assign to the storage account. Only if identity = "UserAssigned"
       user_assigned_identities   	= [
-        # {
-        #   name					 = "id-qual-st-cmk-01"
-        #   resource_group = "rg-tfmodel-qual-001"
-        # }
+        {
+          name					 = "id-qual-st-cmk-01"
+          resource_group = "rg-tfmodel-qual-001"
+        }
       ]
       # keyvault cmk key encryption
       kv_cmk = {
-          # kv_name     = "kv-fidal-qual-cmk-01"
-          # kv_rg       = "rg-tfmodel-qual-001"
-          # kv_key_name = "stqtfmodel01-cmk-01"
+          kv_name     = "kv-fidal-qual-cmk-01"
+          kv_rg       = "rg-tfmodel-qual-001"
+          kv_key_name = "stqtfmodel01-cmk-01"
       }
       # List of containers to create
       Containers = [
@@ -136,42 +136,42 @@ locals {
 
           # lifecycle management at the container
           lcm_rules = [
-            # # comment out the lcm rules below if not needed
-            # {
-            #   # name of rule
-            #   name = "ruletest1"
-            #   #The prefix specifies which blobs must be filtered on the container to apply the policy. 
-            #   #If applying to the entire container, it must be empty: prefix = [] 
-            #   prefix = ["folder1", "folder2"]
-            #   #blob_type are the types of blob objects we want to process.  
-            #   #Possibles values : ["blockBlob"] or ["appendBlob"] or ["blockBlob","appendBlob"]
-            #   blob_types = ["blockBlob"]
-            #   politique = {
-            #     # Delete blob created greater than x days ago
-            #     delete_created = 7
-            #     # Delete blob modified greater than x days ago
-            #     delete_modified = null
-            #     # Move blob created greater than x days ago to the cool tier
-            #     move_to_cool_created  = null
-            #     # Move blob modified greater than x days ago to the cool tier
-            #     move_to_cool_modified = null
-            #     # Move blob created greater than x days ago to the cold tier
-            #     move_to_cold_created  = null
-            #     # Move blob modified greater than x days ago to the cold tier
-            #     move_to_cold_modified = null
-            #     # Move blob created greater than x days ago to the archive tier
-            #     move_to_archive_created = null
-            #     # Move blob modified greater than x days ago to the archive tier
-            #     move_to_archive_modified = null
-            #     # Delete snapshot since created greater than x days ago
-            #     snapshop_delete = null
-            #     # Delete version since created greater than x days ago
-            #     version_delete = null
-            #   }
-            # }
-            # # # add more lcm rules below if necessary with comma separation
+            # comment out the lcm rules below if not needed
+            {
+              # name of rule
+              name = "ruletest1"
+              #The prefix specifies which blobs must be filtered on the container to apply the policy. 
+              #If applying to the entire container, it must be empty: prefix = [] 
+              prefix = ["folder1", "folder2"]
+              #blob_type are the types of blob objects we want to process.  
+              #Possibles values : ["blockBlob"] or ["appendBlob"] or ["blockBlob","appendBlob"]
+              blob_types = ["blockBlob"]
+              politique = {
+                # Delete blob created greater than x days ago
+                delete_created = 7
+                # Delete blob modified greater than x days ago
+                delete_modified = null
+                # Move blob created greater than x days ago to the cool tier
+                move_to_cool_created  = null
+                # Move blob modified greater than x days ago to the cool tier
+                move_to_cool_modified = null
+                # Move blob created greater than x days ago to the cold tier
+                move_to_cold_created  = null
+                # Move blob modified greater than x days ago to the cold tier
+                move_to_cold_modified = null
+                # Move blob created greater than x days ago to the archive tier
+                move_to_archive_created = null
+                # Move blob modified greater than x days ago to the archive tier
+                move_to_archive_modified = null
+                # Delete snapshot since created greater than x days ago
+                snapshop_delete = null
+                # Delete version since created greater than x days ago
+                version_delete = null
+              }
+            }
+            # # add more lcm rules below if necessary with comma separation
           ]
-          #Police Immuable pour la protection des données de type blob en modification ou suppression
+          # Police Immuable pour la protection des données de type blob en modification ou suppression
           immutability_policy = {
             # true = creation de la police time based / false = pas de creation de polce time based
             time_based_enabled = false
@@ -190,7 +190,7 @@ locals {
             time_based_protected_append_writes = "none" # none | append | all
           }
         }
-        # # add more containers below if necessary wih comma separation
+        # add more containers below if necessary wih comma separation
       ]
       azure_file_shares = [
         # comment out the file shares below if not needed
@@ -214,8 +214,8 @@ locals {
           # comment out the role assignment below if not needed
           # Allowed values for role are :
           # "Storage File Data SMB Share Reader", "Storage File Data SMB Share Contributor" or "Storage File Data SMB Share Elevated Contributor"
-           # { group_name = "GRPC_AZURE_TFMODEL1", role = "Storage File Data SMB Share Contributor" },
-            { group_name = "GRPC_AZURE_TFMODEL1", role = "Storage File Data SMB Share Reader" }
+           { group_name = "GRPC_AZURE_TFMODEL1", role = "Storage File Data SMB Share Contributor" },
+           { group_name = "GRPC_AZURE_TFMODEL1", role = "Storage File Data SMB Share Reader" }
           ] 
 
         }
@@ -230,36 +230,36 @@ locals {
       ]
       # Lifecycle management at the storage account level. rules to be applied to all containers
       account_lcm_rules = [
-            # # # comment out the lcm rules below if not needed
-            # {
-            #   # name of rule
-            #   name = "deleteMoreThan24h"
-            #   # blob_type are the types of blob objects we want to process.  
-            #   # Possibles values : ["blockBlob"] or ["appendBlob"] or ["blockBlob","appendBlob"]
-            #   blob_types = ["blockBlob","appendBlob"]
-            #   politique = {
-            #     # Delete blob created greater than x days ago
-            #     delete_created = null
-            #     # Delete blob modified greater than x days ago
-            #     delete_modified = 1
-            #     # Move blob created greater than x days ago to the cool tier
-            #     move_to_cool_created  = null
-            #     # Move blob modified greater than x days ago to the cool tier
-            #     move_to_cool_modified = null
-            #     # Move blob created greater than x days ago to the cold tier
-            #     move_to_cold_created  = null
-            #     # Move blob modified greater than x days ago to the cold tier
-            #     move_to_cold_modified = null
-            #     # Move blob created greater than x days ago to the archive tier
-            #     move_to_archive_created = null
-            #     # Move blob modified greater than x days ago to the archive tier
-            #     move_to_archive_modified = null
-            #     # Delete snapshot since created greater than x days ago
-            #     snapshop_delete = null
-            #     # Delete version since created greater than x days ago
-            #     version_delete = null
-            #   }
-            # }
+            # # comment out the lcm rules below if not needed
+            {
+              # name of rule
+              name = "deleteMoreThan24h"
+              # blob_type are the types of blob objects we want to process.  
+              # Possibles values : ["blockBlob"] or ["appendBlob"] or ["blockBlob","appendBlob"]
+              blob_types = ["blockBlob","appendBlob"]
+              politique = {
+                # Delete blob created greater than x days ago
+                delete_created = null
+                # Delete blob modified greater than x days ago
+                delete_modified = 1
+                # Move blob created greater than x days ago to the cool tier
+                move_to_cool_created  = null
+                # Move blob modified greater than x days ago to the cool tier
+                move_to_cool_modified = null
+                # Move blob created greater than x days ago to the cold tier
+                move_to_cold_created  = null
+                # Move blob modified greater than x days ago to the cold tier
+                move_to_cold_modified = null
+                # Move blob created greater than x days ago to the archive tier
+                move_to_archive_created = null
+                # Move blob modified greater than x days ago to the archive tier
+                move_to_archive_modified = null
+                # Delete snapshot since created greater than x days ago
+                snapshop_delete = null
+                # Delete version since created greater than x days ago
+                version_delete = null
+              }
+            }
       ]
       # private endpoint for Azure File share
       AFS_private_endpoint = {
@@ -339,15 +339,15 @@ locals {
       ACL_default_action = "Deny"
       # Subnets allowed to access the storage account
       ACL_subnets = [
-        # jumpbox subnet (mandatory)
-        # {
-        #   name                 = "snet-prod-westeurope-jumpbox-001"
-        #   virtual_network_name = "vnet-prod-westeurope-jumpbox-001"
-        #   resource_group_name  = "rg-network-prod-001"
-        # }
-        # backup subnet (mandatory)
-        #,
+        jumpbox subnet (mandatory)
         {
+         name                 = "snet-prod-westeurope-jumpbox-001"
+         virtual_network_name = "vnet-prod-westeurope-jumpbox-001"
+         resource_group_name  = "rg-network-prod-001"
+       }
+        backup subnet (mandatory)
+       ,
+       {
           name                 = "snet-prod-westeurope-backup-001"
           virtual_network_name = "vnet-prod-westeurope-backup-001"
           resource_group_name  = "rg-network-prod-001"
@@ -359,16 +359,16 @@ locals {
       # List of user-assigned managed identity that we want to assign to the storage account. 
       # Only if identity = "UserAssigned"
       user_assigned_identities   	= [
-        # {
-        #   name					 = "id-qual-st-cmk-01"
-        #   resource_group = "rg-tfmodel-qual-001"
-        # }
+        {
+          name					 = "id-qual-st-cmk-01"
+          resource_group = "rg-tfmodel-qual-001"
+        }
       ]
       # keyvault cmk key encryption
       kv_cmk = {
-          # kv_name     = "kv-fidal-qual-cmk-01"
-          # kv_rg       = "rg-tfmodel-qual-001"
-          # kv_key_name = "stqtfmodel01-cmk-01"
+        kv_name     = "kv-fidal-qual-cmk-01"
+        kv_rg       = "rg-tfmodel-qual-001"
+        kv_key_name = "stqtfmodel01-cmk-01"
       }
       # List of containers to create
       Containers = [
@@ -392,42 +392,42 @@ locals {
 
           # lifecycle management at the container
           lcm_rules = [
-            # # comment out the lcm rules below if not needed
-            # {
-            #   # name of rule
-            #   name = "ruletest1"
-            #   #The prefix specifies which blobs must be filtered on the container to apply the policy. 
-            #   #If applying to the entire container, it must be empty: prefix = [] 
-            #   prefix = ["folder1", "folder2"]
-            #   #blob_type are the types of blob objects we want to process.  
-            #   #Possibles values : ["blockBlob"] or ["appendBlob"] or ["blockBlob","appendBlob"]
-            #   blob_types = ["blockBlob"]
-            #   politique = {
-            #     # Delete blob created greater than x days ago
-            #     delete_created = 7
-            #     # Delete blob modified greater than x days ago
-            #     delete_modified = null
-            #     # Move blob created greater than x days ago to the cool tier
-            #     move_to_cool_created  = null
-            #     # Move blob modified greater than x days ago to the cool tier
-            #     move_to_cool_modified = null
-            #     # Move blob created greater than x days ago to the cold tier
-            #     move_to_cold_created  = null
-            #     # Move blob modified greater than x days ago to the cold tier
-            #     move_to_cold_modified = null
-            #     # Move blob created greater than x days ago to the archive tier
-            #     move_to_archive_created = null
-            #     # Move blob modified greater than x days ago to the archive tier
-            #     move_to_archive_modified = null
-            #     # Delete snapshot since created greater than x days ago
-            #     snapshop_delete = null
-            #     # Delete version since created greater than x days ago
-            #     version_delete = null
-            #   }
-            # }
-            # # # add more lcm rules below if necessary with comma separation
+            # comment out the lcm rules below if not needed
+            {
+              # name of rule
+              name = "ruletest1"
+              #The prefix specifies which blobs must be filtered on the container to apply the policy. 
+              #If applying to the entire container, it must be empty: prefix = [] 
+              prefix = ["folder1", "folder2"]
+              #blob_type are the types of blob objects we want to process.  
+              #Possibles values : ["blockBlob"] or ["appendBlob"] or ["blockBlob","appendBlob"]
+              blob_types = ["blockBlob"]
+              politique = {
+                # Delete blob created greater than x days ago
+                delete_created = 7
+                # Delete blob modified greater than x days ago
+                delete_modified = null
+                # Move blob created greater than x days ago to the cool tier
+                move_to_cool_created  = null
+                # Move blob modified greater than x days ago to the cool tier
+                move_to_cool_modified = null
+                # Move blob created greater than x days ago to the cold tier
+                move_to_cold_created  = null
+                # Move blob modified greater than x days ago to the cold tier
+                move_to_cold_modified = null
+                # Move blob created greater than x days ago to the archive tier
+                move_to_archive_created = null
+                # Move blob modified greater than x days ago to the archive tier
+                move_to_archive_modified = null
+                # Delete snapshot since created greater than x days ago
+                snapshop_delete = null
+                # Delete version since created greater than x days ago
+                version_delete = null
+              }
+            }
+            # # add more lcm rules below if necessary with comma separation
           ]
-          #Police Immuable pour la protection des données de type blob en modification ou suppression
+          # Police Immuable pour la protection des données de type blob en modification ou suppression
           immutability_policy = {
           # true = creation de la police time based / false = pas de creation de polce time based
           time_based_enabled = false
@@ -438,7 +438,7 @@ locals {
           # statut vérouillé(Locked) : plus possible de supprimer la police. Possibilité de mettre à jour uniquement time_based_retention_days avec une valeur supérieure à celle existante
           # statut dévérouillé(UnLocked) : possibilité de supprimer la police à tout moment et là mettre à jour
           time_based_locked  = false
-          #time_based_protected_append_writes : autorise en exception l'ajout écriture à la fin de l'objet block ou de l'append blobs
+          # time_based_protected_append_writes : autorise en exception l'ajout écriture à la fin de l'objet block ou de l'append blobs
           # Possibles valeurs:
           # none : Aucune exception d'ajout en écriture pour les blocks et append blobs
           # append : Exception uniquement pour objets de type append blobs
@@ -470,8 +470,8 @@ locals {
           # comment out the role assignment below if not needed
           # Allowed values for role are :
           # "Storage File Data SMB Share Reader", "Storage File Data SMB Share Contributor" or "Storage File Data SMB Share Elevated Contributor"
-           # { group_name = "GRPC_AZURE_TFMODEL1", role = "Storage File Data SMB Share Contributor" },
-            { group_name = "GRPC_AZURE_TFMODEL1", role = "Storage File Data SMB Share Reader" }
+           { group_name = "GRPC_AZURE_TFMODEL1", role = "Storage File Data SMB Share Contributor" },
+           { group_name = "GRPC_AZURE_TFMODEL1", role = "Storage File Data SMB Share Reader" }
           ] 
 
         }
@@ -486,36 +486,36 @@ locals {
       ]
       # Lifecycle management at the storage account level. rules to be applied to all containers
       account_lcm_rules = [
-            # # # comment out the lcm rules below if not needed
-            # {
-            #   # name of rule
-            #   name = "deleteMoreThan24h"
-            #   # blob_type are the types of blob objects we want to process.  
-            #   # Possibles values : ["blockBlob"] or ["appendBlob"] or ["blockBlob","appendBlob"]
-            #   blob_types = ["blockBlob","appendBlob"]
-            #   politique = {
-            #     # Delete blob created greater than x days ago
-            #     delete_created = null
-            #     # Delete blob modified greater than x days ago
-            #     delete_modified = 1
-            #     # Move blob created greater than x days ago to the cool tier
-            #     move_to_cool_created  = null
-            #     # Move blob modified greater than x days ago to the cool tier
-            #     move_to_cool_modified = null
-            #     # Move blob created greater than x days ago to the cold tier
-            #     move_to_cold_created  = null
-            #     # Move blob modified greater than x days ago to the cold tier
-            #     move_to_cold_modified = null
-            #     # Move blob created greater than x days ago to the archive tier
-            #     move_to_archive_created = null
-            #     # Move blob modified greater than x days ago to the archive tier
-            #     move_to_archive_modified = null
-            #     # Delete snapshot since created greater than x days ago
-            #     snapshop_delete = null
-            #     # Delete version since created greater than x days ago
-            #     version_delete = null
-            #   }
-            # }
+            # # comment out the lcm rules below if not needed
+            {
+              # name of rule
+              name = "deleteMoreThan24h"
+              # blob_type are the types of blob objects we want to process.  
+              # Possibles values : ["blockBlob"] or ["appendBlob"] or ["blockBlob","appendBlob"]
+              blob_types = ["blockBlob","appendBlob"]
+              politique = {
+                # Delete blob created greater than x days ago
+                delete_created = null
+                # Delete blob modified greater than x days ago
+                delete_modified = 1
+                # Move blob created greater than x days ago to the cool tier
+                move_to_cool_created  = null
+                # Move blob modified greater than x days ago to the cool tier
+                move_to_cool_modified = null
+                # Move blob created greater than x days ago to the cold tier
+                move_to_cold_created  = null
+                # Move blob modified greater than x days ago to the cold tier
+                move_to_cold_modified = null
+                # Move blob created greater than x days ago to the archive tier
+                move_to_archive_created = null
+                # Move blob modified greater than x days ago to the archive tier
+                move_to_archive_modified = null
+                # Delete snapshot since created greater than x days ago
+               snapshop_delete = null
+                # Delete version since created greater than x days ago
+                version_delete = null
+              }
+            }
       ]
      # private endpoint for Azure File share
       AFS_private_endpoint = {

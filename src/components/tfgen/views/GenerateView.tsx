@@ -10,7 +10,7 @@ import {
   UploadZone,
   VariableSection,
 } from "../components";
-import { deriveRgExtractedFields } from "@/lib/tfvars-generator";
+import { deriveRgExtractedFields, deriveVmExtractedFields } from "@/lib/tfvars-generator";
 import { isStorageAccountTemplate } from "@/lib/storage-account-generator";
 import { ApiTemplate, ApiTemplateVariable, CATEGORY_LABELS, toDesignCategory } from "./shared";
 import { buildSections, contentToLines, deriveFileName, rowState, type BuildResult, type Row } from "./tfvarsRender";
@@ -170,13 +170,18 @@ export default function GenerateView({
     // template sélectionné soit le RG lui-même (générés directement) ou un
     // autre template (utilisés pour le panneau RG secondaire).
     const derived = deriveRgExtractedFields(data.extracted);
+    const afterRg = derived ? derived.extracted : data.extracted;
+    // Alias pour le template VM (Resource Group -> vm_rg, ASG 1 -> asg1_name,
+    // Subnet 1 -> subnet1_name, V-Net -> vnet_name) + vm_type dérivé du code
+    // d'environnement à 3 lettres ci-dessus (ex. "ppd" -> "u").
+    const extractedForFile = deriveVmExtractedFields(afterRg);
 
     setUploadedFiles((prev) => [
       ...prev,
       {
         file,
         fileName: data.fileName,
-        extracted: derived ? derived.extracted : data.extracted,
+        extracted: extractedForFile,
         rgDerived: derived ? { serviceFullname: derived.serviceFullname, env: derived.env } : null,
       },
     ]);

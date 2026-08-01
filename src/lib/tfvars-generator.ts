@@ -235,6 +235,51 @@ export function deriveRgExtractedFields(
   };
 }
 
+/** Code d'environnement sur une lettre, tel qu'utilisé par les variables VM
+ * (ex. env = "q") — dérivé du code à 3 lettres du nom du RG (prod/ppd/qual/homl).
+ * Pas de lettre définie pour sdbx. */
+const ENV_TO_VM_TYPE: Record<string, string> = {
+  prod: "p",
+  ppd: "u",
+  qual: "q",
+  homl: "h",
+};
+
+/**
+ * Complète les paires clé/valeur extraites de la fiche FIS d'un serveur avec
+ * les alias attendus par le template VM :
+ * - "Resource Group" -> vm_rg
+ * - "ASG 1" -> asg1_name
+ * - "Subnet 1" -> subnet1_name
+ * - "V-Net" -> vnet_name
+ * - vm_type, dérivé du code d'environnement à 3 lettres (déjà déduit du nom
+ *   du RG par deriveRgExtractedFields, ex. "ppd" -> "u")
+ * Chaque alias n'est ajouté que si la valeur source est présente.
+ */
+export function deriveVmExtractedFields(
+  extracted: { key: string; value: string }[]
+): { key: string; value: string }[] {
+  const map = new Map(extracted.map((e) => [e.key, e.value]));
+  const result = [...extracted];
+
+  const alias = (sourceKey: string, targetKey: string) => {
+    const value = map.get(sourceKey);
+    if (value) result.push({ key: targetKey, value });
+  };
+
+  alias("resource_group", "vm_rg");
+  alias("asg_1", "asg1_name");
+  alias("subnet_1", "subnet1_name");
+  alias("v_net", "vnet_name");
+
+  const env = map.get("env");
+  if (env && ENV_TO_VM_TYPE[env]) {
+    result.push({ key: "vm_type", value: ENV_TO_VM_TYPE[env] });
+  }
+
+  return result;
+}
+
 /**
  * Fait correspondre les variables extraites du fichier Excel (clé/valeur normalisée)
  * aux variables définies dans le template. Les variables du template sans
