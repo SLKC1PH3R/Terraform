@@ -235,25 +235,36 @@ export function deriveRgExtractedFields(
   };
 }
 
-/** Code d'environnement sur une lettre, tel qu'utilisé par les variables VM
- * (ex. env = "q") — dérivé du code à 3 lettres du nom du RG (prod/ppd/qual/homl).
- * Pas de lettre définie pour sdbx. */
-const ENV_TO_VM_TYPE: Record<string, string> = {
+/** Code d'environnement sur une lettre, tel qu'utilisé par la variable VM
+ * `vm_env` (ex. vm_env = "q") — dérivé du code à 3 lettres du nom du RG
+ * (prod/ppd/qual/homl/sdbx). Cf. WIN-IMAGE.tfvars / LNX-IMG.tfvars :
+ * "p (production), u (uat/preproduction), q (qualification), s (sandbox), h (homologation)". */
+const ENV_TO_VM_ENV: Record<string, string> = {
   prod: "p",
   ppd: "u",
   qual: "q",
+  sdbx: "s",
   homl: "h",
+};
+
+/** "Type de serveur : Infra /Appli" (fiche FIS) -> valeurs attendues par la
+ * variable `vm_type` ("infrastructure" ou "application", cf. WIN-IMAGE.tfvars). */
+const SERVER_TYPE_TO_VM_TYPE: Record<string, string> = {
+  infra: "infrastructure",
+  appli: "application",
 };
 
 /**
  * Complète les paires clé/valeur extraites de la fiche FIS d'un serveur avec
- * les alias attendus par le template VM :
+ * les alias attendus par les templates VM (WIN-IMAGE.tfvars, LNX-IMG.tfvars) :
  * - "Resource Group" -> vm_rg
  * - "ASG 1" -> asg1_name
  * - "Subnet 1" -> subnet1_name
  * - "V-Net" -> vnet_name
- * - vm_type, dérivé du code d'environnement à 3 lettres (déjà déduit du nom
- *   du RG par deriveRgExtractedFields, ex. "ppd" -> "u")
+ * - vm_env, dérivé du code d'environnement à 3 lettres (déjà déduit du nom du
+ *   RG par deriveRgExtractedFields, ex. "ppd" -> "u")
+ * - vm_type ("infrastructure" ou "application"), déduit du champ FIS
+ *   "Type de serveur : Infra /Appli"
  * Chaque alias n'est ajouté que si la valeur source est présente.
  */
 export function deriveVmExtractedFields(
@@ -273,8 +284,16 @@ export function deriveVmExtractedFields(
   alias("v_net", "vnet_name");
 
   const env = map.get("env");
-  if (env && ENV_TO_VM_TYPE[env]) {
-    result.push({ key: "vm_type", value: ENV_TO_VM_TYPE[env] });
+  if (env && ENV_TO_VM_ENV[env]) {
+    result.push({ key: "vm_env", value: ENV_TO_VM_ENV[env] });
+  }
+
+  // Clé normalisée du champ FIS "Type de serveur : Infra /Appli" (l'espace
+  // insécable mal encodé dans l'en-tête source se retrouve fusionné dans la clé).
+  const serverType = map.get("type_de_serveura_infra_appli");
+  if (serverType) {
+    const vmType = SERVER_TYPE_TO_VM_TYPE[serverType.trim().toLowerCase()];
+    if (vmType) result.push({ key: "vm_type", value: vmType });
   }
 
   return result;

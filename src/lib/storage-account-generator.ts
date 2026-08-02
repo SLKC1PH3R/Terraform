@@ -399,3 +399,47 @@ export function buildStorageAccountTfvars(tfContent: string, extracted: Extracte
 
   return `${renderedHeader.replace(/\s*$/, "")}\n\n${saListBlock}${afterArray}`;
 }
+
+/**
+ * Génère le .tfvars pour plusieurs comptes de stockage dans le même fichier
+ * (un objet par fiche Excel dans `SA_list`, séparés par une virgule) — les
+ * scalaires d'en-tête (env, service_fullname, SA_rg, tags) sont dérivés de la
+ * 1ère fiche, partagés par tous les comptes du fichier.
+ */
+export function buildMultiStorageAccountTfvars(tfContent: string, extractedList: ExtractedPair[][]): string {
+  if (extractedList.length === 0) return tfContent;
+  if (extractedList.length === 1) return buildStorageAccountTfvars(tfContent, extractedList[0]);
+
+  const saListMatch = tfContent.match(/SA_list\s*=\s*\[/);
+  if (!saListMatch || saListMatch.index === undefined) {
+    return tfContent;
+  }
+
+  const arrayStart = tfContent.indexOf("[", saListMatch.index);
+  let depth = 0;
+  let arrayEnd = -1;
+  for (let i = arrayStart; i < tfContent.length; i++) {
+    if (tfContent[i] === "[") depth++;
+    else if (tfContent[i] === "]") {
+      depth--;
+      if (depth === 0) {
+        arrayEnd = i;
+        break;
+      }
+    }
+  }
+  if (arrayEnd === -1) return tfContent;
+
+  const headerPart = tfContent.slice(0, saListMatch.index);
+  const afterArray = tfContent.slice(arrayEnd + 1);
+
+  const headerMap = new Map(extractedList[0].map((e) => [e.key, e.value]));
+  const { content: renderedHeader } = buildTfvars(buildHeaderVariables(headerMap), headerPart);
+
+  const renderedObjects = extractedList.map((pairs, i) =>
+    renderStorageAccountObject(new Map(pairs.map((e) => [e.key, e.value])), i)
+  );
+  const saListBlock = `SA_list = [\n${indent(renderedObjects.join(",\n"), 4)}\n]`;
+
+  return `${renderedHeader.replace(/\s*$/, "")}\n\n${saListBlock}${afterArray}`;
+}

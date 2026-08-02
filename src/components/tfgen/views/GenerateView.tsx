@@ -47,10 +47,6 @@ interface BatchResultEntry {
   error?: string;
 }
 
-/** Fait correspondre les valeurs extraites d'une fiche aux variables du
- * template. Avec un `prefix` (ex. "vm2_"), le nom et le groupe de chaque
- * variable sont préfixés, pour fusionner plusieurs ressources du même type
- * dans un seul .tfvars sans collision. */
 function matchRows(
   variables: ApiTemplateVariable[],
   extracted: { key: string; value: string }[],
@@ -62,6 +58,8 @@ function matchRows(
     // Le préfixe s'applique au nom de la variable elle-même (ex. vm2_ip_address)
     // ou, pour une variable de map, au nom du groupe (ex. vm2_tags_always) —
     // pas aux deux, sinon la clé interne du map serait doublement préfixée.
+    // (Repli utilisé uniquement pour les templates qui ne suivent pas la
+    // convention "vm1_" — voir matchRowsForMerge ci-dessous.)
     const group = v.group ? (prefix ? `${prefix}${v.group}` : v.group) : "";
     const name = v.group ? v.name : prefix ? `${prefix}${v.name}` : v.name;
     return {
@@ -73,6 +71,75 @@ function matchRows(
       group,
     };
   });
+}
+
+const VM_TOKEN_RE = /(?<![a-z0-9])vm1(?![a-z0-9])/i;
+
+/** Renomme le jeton "vm1" (délimité) en "vmN" dans un nom de variable ou de
+ * groupe — ex. "vm1_index" -> "vm2_index", "tags_vm1_datadisk1" ->
+ * "tags_vm2_datadisk1" — sans toucher aux autres chiffres du nom (ex.
+ * "datadisk1" reste "datadisk1"). Convention observée dans WIN-IMAGE.tfvars /
+ * LNX-IMG.tfvars (vm1_*, tags_vm1*, create_vm1_datadisk*), où la "2e VM" d'un
+ * même fichier remplace ce jeton plutôt que de préfixer par-dessus. */
+function renumberVmToken(text: string, n: number): { text: string; changed: boolean } {
+  let changed = false;
+  const result = text.replace(new RegExp(VM_TOKEN_RE.source, "gi"), () => {
+    changed = true;
+    return `vm${n}`;
+  });
+  return { text: result, changed };
+}
+
+function templateHasVmToken(variables: ApiTemplateVariable[]): boolean {
+  return variables.some((v) => VM_TOKEN_RE.test(v.name) || (!!v.group && VM_TOKEN_RE.test(v.group)));
+}
+
+/** Fait correspondre les valeurs extraites d'une fiche aux variables du
+ * template pour fusionner plusieurs ressources du même type dans un seul
+ * .tfvars. Le 1er fichier (index 1) garde les noms tels quels. Pour les
+ * suivants, seules les variables contenant le jeton "vm1" sont renumérotées
+ * (vm1 -> vm2, vm3, ...) et dupliquées ; les variables partagées (env,
+ * service_fullname, vm_rg, tags_always, ...) sont ignorées car déjà
+ * couvertes par le 1er fichier. */
+function matchRowsForMerge(
+  variables: ApiTemplateVariable[],
+  extracted: { key: string; value: string }[],
+  index: number
+): Row[] {
+  const extractedMap = new Map(extracted.map((x) => [x.key, x.value]));
+  const rows: Row[] = [];
+
+  for (const v of variables) {
+    const found = extractedMap.get(v.name.toLowerCase());
+    const finalValue = found !== undefined ? found : v.defaultValue || "";
+
+    if (index === 1) {
+      rows.push({
+        name: v.name,
+        type: v.type,
+        defaultValue: v.defaultValue || "",
+        finalValue,
+        matched: found !== undefined,
+        group: v.group || "",
+      });
+      continue;
+    }
+
+    const nameR = renumberVmToken(v.name, index);
+    const groupR = v.group ? renumberVmToken(v.group, index) : { text: "", changed: false };
+    if (!nameR.changed && !groupR.changed) continue; // variable partagée, déjà couverte par le 1er fichier
+
+    rows.push({
+      name: nameR.text,
+      type: v.type,
+      defaultValue: v.defaultValue || "",
+      finalValue,
+      matched: found !== undefined,
+      group: groupR.text,
+    });
+  }
+
+  return rows;
 }
 
 export default function GenerateView({
@@ -102,7 +169,7 @@ export default function GenerateView({
   const [createRg, setCreateRg] = useState(false);
   const [rgResult, setRgResult] = useState<BuildResult | null>(null);
 
-  const [saExtracted, setSaExtracted] = useState<{ key: string; value: string }[]>([]);
+  const [saExtractedList, setSaExtractedList] = useState<{ key: string; value: string }[][]>([]);
 
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
   const [openRgSections, setOpenRgSections] = useState<Record<string, boolean>>({});
@@ -126,7 +193,7 @@ export default function GenerateView({
     setUploadedFiles([]);
     setBatchResults([]);
     setRows([]);
-    setSaExtracted([]);
+    setSaExtractedList([]);
     setResult(null);
     setRgInfo(null);
     setRgResult(null);
@@ -207,10 +274,18 @@ export default function GenerateView({
 
   function proceedMerge() {
     if (!selectedTemplate || uploadedFiles.length < 2) return;
+    // Convention WIN-IMAGE/LNX-IMG (vm1_*, tags_vm1...) : on renumérote le
+    // jeton vm1 -> vm2/vm3/... plutôt que de préfixer par-dessus. Repli sur
+    // un préfixe générique si le template ne suit pas cette convention.
+    const useTokenRenumber = templateHasVmToken(selectedTemplate.variables);
     const combined: Row[] = [];
     uploadedFiles.forEach((uf, i) => {
-      const prefix = i === 0 ? "" : `vm${i + 1}_`;
-      combined.push(...matchRows(selectedTemplate.variables, uf.extracted, prefix));
+      if (useTokenRenumber) {
+        combined.push(...matchRowsForMerge(selectedTemplate.variables, uf.extracted, i + 1));
+      } else {
+        const prefix = i === 0 ? "" : `vm${i + 1}_`;
+        combined.push(...matchRows(selectedTemplate.variables, uf.extracted, prefix));
+      }
     });
     setRows(combined);
     setFileName(uploadedFiles.map((f) => f.fileName).join(" + "));
@@ -263,17 +338,22 @@ export default function GenerateView({
    * pas de table de variables groupées comme les autres templates (la
    * structure est dynamique — conteneurs/partages/etc. gérés côté serveur
    * par storage-account-generator.ts), mais on affiche quand même les
-   * paires extraites de la fiche pour vérification/correction avant
-   * génération. */
+   * paires extraites de chaque fiche pour vérification/correction avant
+   * génération. Plusieurs fiches -> plusieurs comptes de stockage dans le
+   * même SA_list (env/service_fullname/SA_rg/tags dérivés de la 1ère fiche). */
   function proceedToStorageReview() {
     if (uploadedFiles.length === 0) return;
-    setFileName(uploadedFiles[0].fileName);
-    setSaExtracted(uploadedFiles[0].extracted.map((e) => ({ ...e })));
+    setFileName(uploadedFiles.map((f) => f.fileName).join(" + "));
+    setSaExtractedList(uploadedFiles.map((uf) => uf.extracted.map((e) => ({ ...e }))));
     setStep(3);
   }
 
-  function updateSaExtracted(index: number, value: string) {
-    setSaExtracted((prev) => prev.map((e, i) => (i === index ? { ...e, value } : e)));
+  function updateSaExtracted(fileIndex: number, entryIndex: number, value: string) {
+    setSaExtractedList((prev) =>
+      prev.map((entries, fi) =>
+        fi === fileIndex ? entries.map((e, i) => (i === entryIndex ? { ...e, value } : e)) : entries
+      )
+    );
   }
 
   async function proceedStorageAccount() {
@@ -281,18 +361,17 @@ export default function GenerateView({
     setGenerating(true);
     setError("");
 
-    const uf = uploadedFiles[0];
-    const sourceFileBase64 = await fileToBase64(uf.file);
+    const sourceFileBase64 = await fileToBase64(uploadedFiles[0].file);
 
     const res = await fetch("/api/generate/build", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         templateId,
-        fileName: uf.fileName,
+        fileName: uploadedFiles.map((f) => f.fileName).join(" + "),
         sourceFileBase64,
-        sourceFileMime: uf.file.type || undefined,
-        extracted: saExtracted,
+        sourceFileMime: uploadedFiles[0].file.type || undefined,
+        extracted: saExtractedList,
       }),
     });
 
@@ -405,8 +484,8 @@ export default function GenerateView({
           {
             label: "Revue des valeurs",
             hint: isStorageAccount
-              ? saExtracted.length
-                ? `${saExtracted.length} champs`
+              ? saExtractedList.length
+                ? `${saExtractedList.length} compte(s)`
                 : "—"
               : rows.length
                 ? `${modifiedCount} / ${rows.length} modifiées`
@@ -528,9 +607,10 @@ export default function GenerateView({
             </p>
           )}
 
-          {isStorageAccount && uploadedFiles.length > 1 && (
+          {isStorageAccount && uploadedFiles.length >= 2 && (
             <p style={{ color: "#A3A3A3", fontSize: 12.5 }}>
-              Ce template génère un seul compte de stockage par fiche : seule la 1ère fiche importée sera utilisée.
+              {uploadedFiles.length} fiches importées : elles seront toutes générées dans le même .tfvars, un compte
+              de stockage par fiche dans SA_list (env/service_fullname/RG/tags communs déduits de la 1ère fiche).
             </p>
           )}
 
@@ -565,71 +645,84 @@ export default function GenerateView({
         </>
       )}
 
-      {step === 3 && isStorageAccount && saExtracted.length > 0 && (
+      {step === 3 && isStorageAccount && saExtractedList.length > 0 && (
         <>
           <p style={{ color: "#A3A3A3", fontSize: 12.5 }}>
-            {saExtracted.length} champs lus dans la fiche. Corrigez si besoin avant de générer — les listes
-            (conteneurs, partages, ACL, règles LCM, ...) seront construites automatiquement à partir de ces valeurs.
+            {saExtractedList.length > 1
+              ? `${saExtractedList.length} comptes de stockage seront générés dans le même .tfvars.`
+              : "Champs lus dans la fiche."}{" "}
+            Corrigez si besoin avant de générer — les listes (conteneurs, partages, ACL, règles LCM, ...) seront
+            construites automatiquement à partir de ces valeurs.
           </p>
-          <div
-            style={{
-              borderRadius: 12,
-              background: "#171717",
-              boxShadow: "0 0 0 1px #262626",
-              overflow: "hidden",
-            }}
-          >
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1.1fr 1.9fr",
-                gap: 12,
-                padding: "8px 14px",
-                borderBottom: "1px solid #262626",
-                fontSize: 9.5,
-                letterSpacing: "0.12em",
-                textTransform: "uppercase",
-                color: "#737373",
-              }}
-            >
-              <div>Champ</div>
-              <div>Valeur</div>
-            </div>
-            {saExtracted.map((e, i) => (
+
+          {saExtractedList.map((entries, fileIndex) => (
+            <div key={fileIndex} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {saExtractedList.length > 1 && (
+                <div style={{ fontFamily: "monospace", fontSize: 12, color: "#D8B9FF" }}>
+                  Compte {fileIndex + 1} — {uploadedFiles[fileIndex]?.fileName}
+                </div>
+              )}
               <div
-                key={i}
                 style={{
-                  display: "grid",
-                  gridTemplateColumns: "1.1fr 1.9fr",
-                  gap: 12,
-                  alignItems: "center",
-                  padding: "6px 14px",
-                  borderBottom: i < saExtracted.length - 1 ? "1px solid #262626" : undefined,
+                  borderRadius: 12,
+                  background: "#171717",
+                  boxShadow: "0 0 0 1px #262626",
+                  overflow: "hidden",
                 }}
               >
-                <span style={{ fontFamily: "monospace", fontSize: 12, color: "#E5E5E5", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {e.key}
-                </span>
-                <textarea
-                  value={e.value}
-                  onChange={(ev) => updateSaExtracted(i, ev.target.value)}
-                  rows={e.value.includes("\n") ? Math.min(6, e.value.split("\n").length) : 1}
+                <div
                   style={{
-                    width: "100%",
-                    boxSizing: "border-box",
-                    fontFamily: "monospace",
-                    fontSize: 12,
-                    padding: "4px 8px",
-                    borderRadius: 6,
-                    border: "1px solid #333333",
-                    background: "#0A0A0A",
-                    color: "#FAFAFA",
-                    resize: "vertical",
+                    display: "grid",
+                    gridTemplateColumns: "1.1fr 1.9fr",
+                    gap: 12,
+                    padding: "8px 14px",
+                    borderBottom: "1px solid #262626",
+                    fontSize: 9.5,
+                    letterSpacing: "0.12em",
+                    textTransform: "uppercase",
+                    color: "#737373",
                   }}
-                />
+                >
+                  <div>Champ</div>
+                  <div>Valeur</div>
+                </div>
+                {entries.map((e, i) => (
+                  <div
+                    key={i}
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1.1fr 1.9fr",
+                      gap: 12,
+                      alignItems: "center",
+                      padding: "6px 14px",
+                      borderBottom: i < entries.length - 1 ? "1px solid #262626" : undefined,
+                    }}
+                  >
+                    <span style={{ fontFamily: "monospace", fontSize: 12, color: "#E5E5E5", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {e.key}
+                    </span>
+                    <textarea
+                      value={e.value}
+                      onChange={(ev) => updateSaExtracted(fileIndex, i, ev.target.value)}
+                      rows={e.value.includes("\n") ? Math.min(6, e.value.split("\n").length) : 1}
+                      style={{
+                        width: "100%",
+                        boxSizing: "border-box",
+                        fontFamily: "monospace",
+                        fontSize: 12,
+                        padding: "4px 8px",
+                        borderRadius: 6,
+                        border: "1px solid #333333",
+                        background: "#0A0A0A",
+                        color: "#FAFAFA",
+                        resize: "vertical",
+                      }}
+                    />
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
+            </div>
+          ))}
 
           <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
             <Button onClick={() => setStep(2)}>Retour</Button>

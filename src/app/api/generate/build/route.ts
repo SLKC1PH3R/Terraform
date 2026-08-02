@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { buildTfvars, VariableForGeneration } from "@/lib/tfvars-generator";
-import { buildStorageAccountTfvars, isStorageAccountTemplate } from "@/lib/storage-account-generator";
+import { buildMultiStorageAccountTfvars, isStorageAccountTemplate } from "@/lib/storage-account-generator";
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
@@ -9,7 +9,7 @@ export async function POST(req: NextRequest) {
     templateId: string;
     fileName: string;
     variables?: VariableForGeneration[];
-    extracted?: { key: string; value: string }[];
+    extracted?: { key: string; value: string }[] | { key: string; value: string }[][];
     sourceFileBase64?: string;
     sourceFileMime?: string;
   };
@@ -27,7 +27,8 @@ export async function POST(req: NextRequest) {
   let diff: ReturnType<typeof buildTfvars>["diff"];
 
   if (isStorageAccountTemplate(template?.tfContent) && extracted) {
-    content = buildStorageAccountTfvars(template!.tfContent!, extracted);
+    const extractedList = Array.isArray(extracted[0]) ? extracted : [extracted];
+    content = buildMultiStorageAccountTfvars(template!.tfContent!, extractedList as { key: string; value: string }[][]);
     diff = [];
   } else {
     if (!variables) {
