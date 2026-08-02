@@ -102,6 +102,8 @@ export default function GenerateView({
   const [createRg, setCreateRg] = useState(false);
   const [rgResult, setRgResult] = useState<BuildResult | null>(null);
 
+  const [saExtracted, setSaExtracted] = useState<{ key: string; value: string }[]>([]);
+
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
   const [openRgSections, setOpenRgSections] = useState<Record<string, boolean>>({});
 
@@ -124,6 +126,7 @@ export default function GenerateView({
     setUploadedFiles([]);
     setBatchResults([]);
     setRows([]);
+    setSaExtracted([]);
     setResult(null);
     setRgInfo(null);
     setRgResult(null);
@@ -257,11 +260,24 @@ export default function GenerateView({
   }
 
   /** Templates "Storage Account" (gabarit locals { ... SA_list = [...] } ) :
-   * pas de table de variables à revoir, la génération part directement des
-   * paires extraites de la fiche (listes de conteneurs/partages/etc. gérées
-   * côté serveur par storage-account-generator.ts). */
+   * pas de table de variables groupées comme les autres templates (la
+   * structure est dynamique — conteneurs/partages/etc. gérés côté serveur
+   * par storage-account-generator.ts), mais on affiche quand même les
+   * paires extraites de la fiche pour vérification/correction avant
+   * génération. */
+  function proceedToStorageReview() {
+    if (uploadedFiles.length === 0) return;
+    setFileName(uploadedFiles[0].fileName);
+    setSaExtracted(uploadedFiles[0].extracted.map((e) => ({ ...e })));
+    setStep(3);
+  }
+
+  function updateSaExtracted(index: number, value: string) {
+    setSaExtracted((prev) => prev.map((e, i) => (i === index ? { ...e, value } : e)));
+  }
+
   async function proceedStorageAccount() {
-    if (!selectedTemplate || uploadedFiles.length !== 1) return;
+    if (uploadedFiles.length === 0) return;
     setGenerating(true);
     setError("");
 
@@ -276,7 +292,7 @@ export default function GenerateView({
         fileName: uf.fileName,
         sourceFileBase64,
         sourceFileMime: uf.file.type || undefined,
-        extracted: uf.extracted,
+        extracted: saExtracted,
       }),
     });
 
@@ -386,7 +402,16 @@ export default function GenerateView({
             label: "Fiche(s) Excel",
             hint: uploadedFiles.length > 1 ? `${uploadedFiles.length} fiches` : fileName || "—",
           },
-          { label: "Revue des valeurs", hint: rows.length ? `${modifiedCount} / ${rows.length} modifiées` : "—" },
+          {
+            label: "Revue des valeurs",
+            hint: isStorageAccount
+              ? saExtracted.length
+                ? `${saExtracted.length} champs`
+                : "—"
+              : rows.length
+                ? `${modifiedCount} / ${rows.length} modifiées`
+                : "—",
+          },
           {
             label: "Résultat",
             hint: result ? "généré" : batchResults.length ? `${batchResults.length} générés` : "—",
@@ -513,8 +538,8 @@ export default function GenerateView({
             <Button onClick={() => setStep(1)}>Retour</Button>
             {isStorageAccount ? (
               uploadedFiles.length >= 1 && (
-                <Button variant="generate" onClick={proceedStorageAccount} disabled={generating}>
-                  {generating ? "Génération..." : "Générer le .tfvars"}
+                <Button variant="primary" onClick={proceedToStorageReview}>
+                  Continuer
                 </Button>
               )
             ) : (
@@ -540,7 +565,82 @@ export default function GenerateView({
         </>
       )}
 
-      {step === 3 && rows.length > 0 && (
+      {step === 3 && isStorageAccount && saExtracted.length > 0 && (
+        <>
+          <p style={{ color: "#A3A3A3", fontSize: 12.5 }}>
+            {saExtracted.length} champs lus dans la fiche. Corrigez si besoin avant de générer — les listes
+            (conteneurs, partages, ACL, règles LCM, ...) seront construites automatiquement à partir de ces valeurs.
+          </p>
+          <div
+            style={{
+              borderRadius: 12,
+              background: "#171717",
+              boxShadow: "0 0 0 1px #262626",
+              overflow: "hidden",
+            }}
+          >
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1.1fr 1.9fr",
+                gap: 12,
+                padding: "8px 14px",
+                borderBottom: "1px solid #262626",
+                fontSize: 9.5,
+                letterSpacing: "0.12em",
+                textTransform: "uppercase",
+                color: "#737373",
+              }}
+            >
+              <div>Champ</div>
+              <div>Valeur</div>
+            </div>
+            {saExtracted.map((e, i) => (
+              <div
+                key={i}
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1.1fr 1.9fr",
+                  gap: 12,
+                  alignItems: "center",
+                  padding: "6px 14px",
+                  borderBottom: i < saExtracted.length - 1 ? "1px solid #262626" : undefined,
+                }}
+              >
+                <span style={{ fontFamily: "monospace", fontSize: 12, color: "#E5E5E5", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {e.key}
+                </span>
+                <textarea
+                  value={e.value}
+                  onChange={(ev) => updateSaExtracted(i, ev.target.value)}
+                  rows={e.value.includes("\n") ? Math.min(6, e.value.split("\n").length) : 1}
+                  style={{
+                    width: "100%",
+                    boxSizing: "border-box",
+                    fontFamily: "monospace",
+                    fontSize: 12,
+                    padding: "4px 8px",
+                    borderRadius: 6,
+                    border: "1px solid #333333",
+                    background: "#0A0A0A",
+                    color: "#FAFAFA",
+                    resize: "vertical",
+                  }}
+                />
+              </div>
+            ))}
+          </div>
+
+          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+            <Button onClick={() => setStep(2)}>Retour</Button>
+            <Button variant="generate" onClick={proceedStorageAccount} disabled={generating}>
+              {generating ? "Génération..." : "Générer le .tfvars"}
+            </Button>
+          </div>
+        </>
+      )}
+
+      {step === 3 && !isStorageAccount && rows.length > 0 && (
         <>
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
             <StatusPill tone="ok">{modifiedCount} modifiées</StatusPill>
