@@ -41,7 +41,7 @@ export default function EditorView({
       <div style={{ display: "flex", alignItems: "flex-end", gap: 16, flexWrap: "wrap" }}>
         <div style={{ flex: 1, minWidth: 240 }}>
           <h1 style={{ fontSize: 28, margin: "0 0 6px", fontWeight: 600 }}>Éditeur de template</h1>
-          <p style={{ margin: 0, fontFamily: "monospace", fontSize: 13, color: "#A3A3A3" }}>
+          <p style={{ margin: 0, fontFamily: "monospace", fontSize: 13, color: "#A8A199" }}>
             {selected ? selected.name : "Nouveau template"}
           </p>
         </div>
@@ -70,17 +70,17 @@ export default function EditorView({
               cursor: "pointer",
               padding: "8px 12px",
               borderRadius: 10,
-              background: "#171717",
-              border: `1px solid ${t.id === selectedId ? "#A855F7" : "#262626"}`,
+              background: "#1A1815",
+              border: `1px solid ${t.id === selectedId ? "#E9A23B" : "#2A2723"}`,
               display: "flex",
               alignItems: "center",
               gap: 8,
-              color: "#FAFAFA",
+              color: "#F5F2ED",
             }}
           >
             <CategoryBadge category={toDesignCategory(t.category)} size="sm" />
             <span style={{ fontFamily: "monospace", fontSize: 12.5 }}>{t.name}</span>
-            <span style={{ fontSize: 10.5, color: "#737373" }}>{formatRelative(t.updatedAt)}</span>
+            <span style={{ fontSize: 10.5, color: "#7A736A" }}>{formatRelative(t.updatedAt)}</span>
           </button>
         ))}
       </div>

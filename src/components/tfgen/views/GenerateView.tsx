@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import {
   Button,
   CategoryBadge,
+  CategoryTile,
   StatusPill,
   Stepper,
   TfvarsPreview,
@@ -517,21 +518,22 @@ export default function GenerateView({
                   cursor: "pointer",
                   padding: 14,
                   borderRadius: 12,
-                  background: "#171717",
-                  border: `1px solid ${t.id === templateId ? "#A855F7" : "#262626"}`,
+                  background: "#1A1815",
+                  border: `1px solid ${t.id === templateId ? "#E9A23B" : "#2A2723"}`,
                   display: "flex",
                   flexDirection: "column",
                   gap: 9,
-                  color: "#FAFAFA",
+                  color: "#F5F2ED",
                 }}
               >
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <span style={{ fontFamily: "monospace", fontSize: 13.5, color: "#D8B9FF" }}>{t.name}</span>
+                <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
+                  <CategoryTile category={toDesignCategory(t.category)} size={26} />
+                  <span style={{ fontFamily: "monospace", fontSize: 13.5, color: "#F3C88C" }}>{t.name}</span>
                   <span style={{ marginLeft: "auto" }}>
                     <CategoryBadge category={toDesignCategory(t.category)} size="sm" />
                   </span>
                 </div>
-                <div style={{ fontSize: 12.5, color: "#A3A3A3", lineHeight: 1.5 }}>
+                <div style={{ fontSize: 12.5, color: "#A8A199", lineHeight: 1.5 }}>
                   {t.description || CATEGORY_LABELS[t.category]} · {t.variables.length} variables
                 </div>
               </button>
@@ -551,14 +553,14 @@ export default function GenerateView({
             onPick={handleAddFile}
             hint="Formats .xlsx et .xlsm · plusieurs fiches possibles (une par VM à générer ou fusionner)."
           />
-          {uploading && <p style={{ color: "#A3A3A3", fontSize: 13 }}>Lecture du fichier...</p>}
+          {uploading && <p style={{ color: "#A8A199", fontSize: 13 }}>Lecture du fichier...</p>}
 
           {uploadedFiles.length > 0 && (
             <div
               style={{
                 borderRadius: 12,
-                background: "#171717",
-                boxShadow: "0 0 0 1px #262626",
+                background: "#1A1815",
+                boxShadow: "0 0 0 1px #2A2723",
                 overflow: "hidden",
               }}
             >
@@ -570,26 +572,26 @@ export default function GenerateView({
                     alignItems: "center",
                     gap: 10,
                     padding: "10px 14px",
-                    borderBottom: i < uploadedFiles.length - 1 ? "1px solid #262626" : undefined,
+                    borderBottom: i < uploadedFiles.length - 1 ? "1px solid #2A2723" : undefined,
                   }}
                 >
                   <span
                     style={{
                       fontFamily: "monospace",
                       fontSize: 10.5,
-                      color: "#D8B9FF",
-                      border: "1px solid #4A2A6B",
+                      color: "#F3C88C",
+                      border: "1px solid #5C4420",
                       borderRadius: 4,
                       padding: "1px 6px",
                     }}
                   >
                     {isStorageAccount ? "Fiche" : `VM${i + 1}`}
                   </span>
-                  <span style={{ fontFamily: "monospace", fontSize: 12.5, color: "#E5E5E5" }}>{uf.fileName}</span>
+                  <span style={{ fontFamily: "monospace", fontSize: 12.5, color: "#DED8CF" }}>{uf.fileName}</span>
                   <button
                     type="button"
                     onClick={() => removeUploadedFile(i)}
-                    style={{ marginLeft: "auto", background: "none", border: 0, color: "#737373", cursor: "pointer", fontSize: 16, lineHeight: 1 }}
+                    style={{ marginLeft: "auto", background: "none", border: 0, color: "#7A736A", cursor: "pointer", fontSize: 16, lineHeight: 1 }}
                     title="Retirer cette fiche"
                   >
                     ×
@@ -600,7 +602,7 @@ export default function GenerateView({
           )}
 
           {!isStorageAccount && uploadedFiles.length >= 2 && (
-            <p style={{ color: "#A3A3A3", fontSize: 12.5 }}>
+            <p style={{ color: "#A8A199", fontSize: 12.5 }}>
               {uploadedFiles.length} fiches importées : générez un .tfvars séparé par fiche, ou fusionnez-les en un
               seul .tfvars (la 1ère fiche garde les noms de variables tels quels, les suivantes sont préfixées
               vm2_, vm3_, ...).
@@ -608,7 +610,7 @@ export default function GenerateView({
           )}
 
           {isStorageAccount && uploadedFiles.length >= 2 && (
-            <p style={{ color: "#A3A3A3", fontSize: 12.5 }}>
+            <p style={{ color: "#A8A199", fontSize: 12.5 }}>
               {uploadedFiles.length} fiches importées : elles seront toutes générées dans le même .tfvars, un compte
               de stockage par fiche dans SA_list (env/service_fullname/RG/tags communs déduits de la 1ère fiche).
             </p>
@@ -647,7 +649,7 @@ export default function GenerateView({
 
       {step === 3 && isStorageAccount && saExtractedList.length > 0 && (
         <>
-          <p style={{ color: "#A3A3A3", fontSize: 12.5 }}>
+          <p style={{ color: "#A8A199", fontSize: 12.5 }}>
             {saExtractedList.length > 1
               ? `${saExtractedList.length} comptes de stockage seront générés dans le même .tfvars.`
               : "Champs lus dans la fiche."}{" "}
@@ -658,15 +660,15 @@ export default function GenerateView({
           {saExtractedList.map((entries, fileIndex) => (
             <div key={fileIndex} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {saExtractedList.length > 1 && (
-                <div style={{ fontFamily: "monospace", fontSize: 12, color: "#D8B9FF" }}>
+                <div style={{ fontFamily: "monospace", fontSize: 12, color: "#F3C88C" }}>
                   Compte {fileIndex + 1} — {uploadedFiles[fileIndex]?.fileName}
                 </div>
               )}
               <div
                 style={{
                   borderRadius: 12,
-                  background: "#171717",
-                  boxShadow: "0 0 0 1px #262626",
+                  background: "#1A1815",
+                  boxShadow: "0 0 0 1px #2A2723",
                   overflow: "hidden",
                 }}
               >
@@ -676,11 +678,11 @@ export default function GenerateView({
                     gridTemplateColumns: "1.1fr 1.9fr",
                     gap: 12,
                     padding: "8px 14px",
-                    borderBottom: "1px solid #262626",
+                    borderBottom: "1px solid #2A2723",
                     fontSize: 9.5,
                     letterSpacing: "0.12em",
                     textTransform: "uppercase",
-                    color: "#737373",
+                    color: "#7A736A",
                   }}
                 >
                   <div>Champ</div>
@@ -695,10 +697,10 @@ export default function GenerateView({
                       gap: 12,
                       alignItems: "center",
                       padding: "6px 14px",
-                      borderBottom: i < entries.length - 1 ? "1px solid #262626" : undefined,
+                      borderBottom: i < entries.length - 1 ? "1px solid #2A2723" : undefined,
                     }}
                   >
-                    <span style={{ fontFamily: "monospace", fontSize: 12, color: "#E5E5E5", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    <span style={{ fontFamily: "monospace", fontSize: 12, color: "#DED8CF", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {e.key}
                     </span>
                     <textarea
@@ -712,9 +714,9 @@ export default function GenerateView({
                         fontSize: 12,
                         padding: "4px 8px",
                         borderRadius: 6,
-                        border: "1px solid #333333",
-                        background: "#0A0A0A",
-                        color: "#FAFAFA",
+                        border: "1px solid #38342E",
+                        background: "#100E0C",
+                        color: "#F5F2ED",
                         resize: "vertical",
                       }}
                     />
@@ -756,8 +758,8 @@ export default function GenerateView({
             <div
               style={{
                 borderRadius: 12,
-                background: "#171717",
-                boxShadow: "0 0 0 1px #262626",
+                background: "#1A1815",
+                boxShadow: "0 0 0 1px #2A2723",
                 padding: 14,
                 display: "flex",
                 flexDirection: "column",
@@ -814,8 +816,8 @@ export default function GenerateView({
           <div
             style={{
               borderRadius: 12,
-              background: "#171717",
-              boxShadow: "0 0 0 1px #262626",
+              background: "#1A1815",
+              boxShadow: "0 0 0 1px #2A2723",
               overflow: "hidden",
             }}
           >
@@ -827,10 +829,10 @@ export default function GenerateView({
                   alignItems: "center",
                   gap: 10,
                   padding: "11px 16px",
-                  borderBottom: i < batchResults.length - 1 ? "1px solid #262626" : undefined,
+                  borderBottom: i < batchResults.length - 1 ? "1px solid #2A2723" : undefined,
                 }}
               >
-                <span style={{ fontFamily: "monospace", fontSize: 12.5, color: "#E5E5E5" }}>{br.fileName}</span>
+                <span style={{ fontFamily: "monospace", fontSize: 12.5, color: "#DED8CF" }}>{br.fileName}</span>
                 <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
                   {br.result ? (
                     <>
@@ -872,7 +874,7 @@ export default function GenerateView({
           {rgResult && (
             <>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <span style={{ fontSize: 13, color: "#A3A3A3" }}>
+                <span style={{ fontSize: 13, color: "#A8A199" }}>
                   Resource Group rg-{rgInfo?.serviceFullname}-{rgInfo?.env}-xxx
                 </span>
                 <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>

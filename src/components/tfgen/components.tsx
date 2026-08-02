@@ -4,6 +4,7 @@ import * as React from 'react';
 import {
   color,
   font,
+  getCategoryIcon,
   getCategoryStyle,
   syntax,
   type ResourceCategory,
@@ -70,6 +71,50 @@ export function Button({
   );
 }
 
+/* -------------------------------------------------------------------- icons */
+
+export function CategoryIcon({
+  category,
+  size = 16,
+}: {
+  category: ResourceCategory;
+  size?: number;
+}) {
+  return (
+    <svg viewBox="0 0 256 256" width={size} height={size} fill="currentColor" style={{ flex: `0 0 ${size}px` }}>
+      <path d={getCategoryIcon(category)} />
+    </svg>
+  );
+}
+
+/** The tinted rounded tile used in front of a template name. */
+export function CategoryTile({
+  category,
+  size = 34,
+}: {
+  category: ResourceCategory;
+  size?: number;
+}) {
+  const c = getCategoryStyle(category);
+  return (
+    <span
+      style={{
+        width: size,
+        height: size,
+        flex: `0 0 ${size}px`,
+        borderRadius: size > 30 ? 9 : 8,
+        display: 'grid',
+        placeItems: 'center',
+        background: c.bg,
+        border: `1px solid ${c.bd}`,
+        color: c.fg,
+      }}
+    >
+      <CategoryIcon category={category} size={Math.round(size * 0.53)} />
+    </span>
+  );
+}
+
 /* ------------------------------------------------------------------- badges */
 
 export function CategoryBadge({
@@ -95,7 +140,7 @@ export function CategoryBadge({
         border: `1px solid ${c.bd}`,
       }}
     >
-      <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'currentColor' }} />
+      <CategoryIcon category={category} size={size === 'sm' ? 12 : 13} />
       {category}
     </span>
   );
@@ -183,7 +228,9 @@ export function TemplateCard({
           {template.version}
         </span>
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <div style={{ display: 'flex', gap: 11, alignItems: 'flex-start' }}>
+        <CategoryTile category={template.category} />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
         <div style={{ fontFamily: font.mono, fontSize: 14, color: color.generateSoft }}>
           {template.id}
         </div>
@@ -196,6 +243,7 @@ export function TemplateCard({
           }}
         >
           {template.description}
+        </div>
         </div>
       </div>
       <div
@@ -400,6 +448,9 @@ export function VariableSection({
       >
         <span style={{ fontFamily: font.mono, fontSize: 11, color: color.textMuted, width: 10 }}>
           {open ? '▾' : '▸'}
+        </span>
+        <span style={{ color: c.fg, display: 'grid', placeItems: 'center' }}>
+          <CategoryIcon category={section.category} size={15} />
         </span>
         <span style={{ fontFamily: font.mono, fontSize: 13 }}>{section.title}</span>
         <span
