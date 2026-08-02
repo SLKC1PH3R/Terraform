@@ -13,6 +13,45 @@ export interface DiffEntry {
   changed: boolean;
 }
 
+/** Découpe une chaîne sur les virgules de premier niveau uniquement (ignore
+ * celles à l'intérieur de guillemets ou de blocs {...}/[...] imbriqués). */
+function splitTopLevel(s: string): string[] {
+  const items: string[] = [];
+  let depth = 0;
+  let inQuotes = false;
+  let current = "";
+
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (ch === '"' && s[i - 1] !== "\\") inQuotes = !inQuotes;
+    if (!inQuotes) {
+      if (ch === "{" || ch === "[") depth++;
+      if (ch === "}" || ch === "]") depth--;
+    }
+    if (ch === "," && depth === 0 && !inQuotes) {
+      items.push(current.trim());
+      current = "";
+      continue;
+    }
+    current += ch;
+  }
+  if (current.trim()) items.push(current.trim());
+
+  return items;
+}
+
+/** Formate un élément de liste : laisse tel quel ce qui ressemble déjà à un
+ * littéral HCL (chaîne entre guillemets, objet, liste, nombre, booléen),
+ * sinon encadre la valeur brute de guillemets. */
+function formatListItem(item: string): string {
+  const t = item.trim();
+  if (!t) return t;
+  if (t.startsWith('"') || t.startsWith("{") || t.startsWith("[")) return t;
+  if (/^(true|false)$/i.test(t)) return t.toLowerCase();
+  if (/^-?\d+(\.\d+)?$/.test(t)) return t;
+  return `"${t.replace(/"/g, '\\"')}"`;
+}
+
 function formatValue(type: string, value: string): string {
   const trimmed = value.trim();
 
@@ -26,12 +65,20 @@ function formatValue(type: string, value: string): string {
       return trimmed || "false";
     }
     case "list": {
-      // valeurs séparées par des virgules -> ["a", "b", "c"]
-      const items = trimmed
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean)
-        .map((s) => `"${s.replace(/"/g, '\\"')}"`);
+      // Certaines fiches FIS renseignent directement un littéral HCL complet
+      // dans la cellule (ex. "[51.124.104.72/32, 20.56.51.3/32]" ou
+      // "[{group_name = \"...\", role = \"...\"}]") plutôt qu'une simple
+      // liste de valeurs séparées par des virgules. On retire les crochets
+      // englobants s'ils sont présents, on découpe au niveau supérieur
+      // (en ignorant les virgules à l'intérieur de guillemets/accolades/
+      // crochets imbriqués), puis on ne ré-encadre de guillemets que les
+      // éléments qui n'en ont pas déjà (chaîne simple) — les objets/listes
+      // imbriqués et déjà entre guillemets sont laissés tels quels.
+      let inner = trimmed;
+      if (inner.startsWith("[") && inner.endsWith("]")) {
+        inner = inner.slice(1, -1);
+      }
+      const items = splitTopLevel(inner).map(formatListItem);
       return `[${items.join(", ")}]`;
     }
     case "map": {
@@ -118,32 +165,68 @@ function buildTfvarsFromReference(tfContent: string, variables: VariableForGener
 
   const assignPattern = /^(\s*)([a-zA-Z_][\w-]*)(\s*=\s*)(.*)$/;
 
-  for (const line of lines) {
+  /** Profondeur nette de crochets/accolades d'une ligne (hors chaînes entre
+   * guillemets), utilisée pour détecter une valeur `key = [ ... ]` (liste,
+   * objet unique, etc.) qui s'étend sur plusieurs lignes. */
+  const bracketDelta = (s: string): number => {
+    let depth = 0;
+    let inQuotes = false;
+    for (let i = 0; i < s.length; i++) {
+      const ch = s[i];
+      if (ch === '"' && s[i - 1] !== "\\") inQuotes = !inQuotes;
+      if (inQuotes) continue;
+      if (ch === "[" || ch === "{") depth++;
+      if (ch === "]" || ch === "}") depth--;
+    }
+    return depth;
+  };
+
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+
     if (currentGroup === null) {
       const openMatch = line.match(/^(\s*)([a-zA-Z_][\w-]*)\s*=\s*\{\s*$/);
       if (openMatch) {
         currentGroup = openMatch[2];
         out.push(line);
+        i++;
         continue;
       }
 
       const assignMatch = line.match(assignPattern);
       if (assignMatch) {
-        const [, indent, key, sep] = assignMatch;
+        const [, indent, key, sep, rest] = assignMatch;
+
+        // Valeur multi-lignes (ex. `key = [` ... `]`) : on repère la fin du
+        // bloc pour soit la remplacer intégralement (si une variable
+        // correspond), soit préserver les lignes d'origine telles quelles.
+        let depth = bracketDelta(rest);
+        let end = i;
+        while (depth > 0 && end + 1 < lines.length) {
+          end++;
+          depth += bracketDelta(lines[end]);
+        }
+
         const v = byTop.get(key);
         if (v) {
           usedTop.add(key);
           out.push(`${indent}${key}${sep}${formatValue(v.type, v.finalValue)}`);
-          continue;
+        } else {
+          for (let k = i; k <= end; k++) out.push(lines[k]);
         }
+        i = end + 1;
+        continue;
       }
       out.push(line);
+      i++;
       continue;
     }
 
     if (/^\s*\}\s*$/.test(line)) {
       currentGroup = null;
       out.push(line);
+      i++;
       continue;
     }
 
@@ -155,10 +238,12 @@ function buildTfvarsFromReference(tfContent: string, variables: VariableForGener
       if (v) {
         usedGroup.add(gkey);
         out.push(`${indent}${key}${sep}${formatValue(v.type, v.finalValue)}`);
+        i++;
         continue;
       }
     }
     out.push(line);
+    i++;
   }
 
   const leftovers = variables.filter((v) =>
