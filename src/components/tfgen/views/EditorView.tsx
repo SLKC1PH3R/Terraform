@@ -51,11 +51,12 @@ export default function EditorView({
       </div>
 
       <div
+        className="tfgen-scroll"
         style={{
           display: "flex",
           gap: 8,
           overflowX: "auto",
-          paddingBottom: 4,
+          paddingBottom: 8,
         }}
       >
         {templates.map((t) => (

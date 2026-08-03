@@ -662,6 +662,7 @@ export function TfvarsPreview({
         </span>
       </div>
       <div
+        className="tfgen-scroll"
         style={{
           padding: '10px 0',
           fontFamily: font.mono,
