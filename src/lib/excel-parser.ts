@@ -136,20 +136,56 @@ function parseSyntheseSheet(workbook: XLSX.WorkBook): ExtractedVariable[] {
   return extracted;
 }
 
+/** Libellés fixes de l'onglet "Bootdiag" (fiches VM) -> nom de variable
+ * attendu par les templates VM (bootdiag_name / bootdiag_rg). */
+const BOOTDIAG_LABEL_TO_KEY: Record<string, string> = {
+  nom_du_compte_de_stockage_de_bootdiag_de_la_vm: "bootdiag_name",
+  nom_du_rg_pour_le_compte_de_stockage_de_bootdiag_de_la_vm: "bootdiag_rg",
+};
+
+/**
+ * Parse l'onglet "Bootdiag" des fiches VM (2 lignes clé/valeur : nom du
+ * compte de stockage de bootdiag et son RG). Absent des fiches CSV et des
+ * autres types de fiche (Storage Account, Key Vault, ...) : retourne un
+ * tableau vide si l'onglet n'existe pas.
+ */
+function parseBootdiagSheet(workbook: XLSX.WorkBook): ExtractedVariable[] {
+  const sheetName = workbook.SheetNames.find((name) => normalize(name).includes("bootdiag"));
+  if (!sheetName) return [];
+
+  const rows: unknown[][] = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], {
+    header: 1,
+    raw: false,
+    defval: "",
+  });
+
+  const extracted: ExtractedVariable[] = [];
+  for (const row of rows) {
+    const label = String((row as unknown[])[0] ?? "").trim();
+    const value = String((row as unknown[])[1] ?? "").trim();
+    if (!label || !value) continue;
+
+    const targetKey = BOOTDIAG_LABEL_TO_KEY[normalizeKey(label)];
+    if (targetKey) extracted.push({ key: targetKey, value });
+  }
+
+  return extracted;
+}
+
 /**
  * Parse une fiche FIS Excel et en extrait les paires clé/valeur. Détecte
  * automatiquement le format : fiche multi-onglets "formulaire" (ex. Storage
- * Account) ou fiche classique à onglet "synthèse".
+ * Account) ou fiche classique à onglet "synthèse" — puis complète, si
+ * présent, avec l'onglet "Bootdiag" des fiches VM.
  */
 export function parseFISExcel(buffer: Buffer): ExtractedVariable[] {
   const workbook = XLSX.read(buffer, { type: "buffer" });
 
   const formExtracted = parseFormSheets(workbook);
-  if (formExtracted && formExtracted.length > 0) {
-    return formExtracted;
-  }
+  const base = formExtracted && formExtracted.length > 0 ? formExtracted : parseSyntheseSheet(workbook);
 
-  return parseSyntheseSheet(workbook);
+  const bootdiag = parseBootdiagSheet(workbook);
+  return bootdiag.length ? [...base, ...bootdiag] : base;
 }
 
 /**
