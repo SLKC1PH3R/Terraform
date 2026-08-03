@@ -2,53 +2,26 @@
 
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Button } from "@/components/ui/button";
 import { NavItem } from "./nav-item";
+import { Icon, ICONS } from "./icons";
 import DashboardView from "./views/DashboardView";
 import GenerateView from "./views/GenerateView";
 import EditorView from "./views/EditorView";
 import HistoryView from "./views/HistoryView";
 import EditTfvarsView from "./views/EditTfvarsView";
+import type { ResumeItem } from "./resume-queue";
 import { ApiGeneration, ApiTemplate } from "./views/shared";
 
 type View = "dashboard" | "generate" | "editor" | "history" | "edit-tfvars";
 
-const NAV: { view: View; label: string; icon: string }[] = [
-  {
-    view: "dashboard",
-    label: "Tableau de bord",
-    icon: "M104,40H56A16,16,0,0,0,40,56v48a16,16,0,0,0,16,16h48a16,16,0,0,0,16-16V56A16,16,0,0,0,104,40Zm0,64H56V56h48v48Zm96-64H152a16,16,0,0,0-16,16v48a16,16,0,0,0,16,16h48a16,16,0,0,0,16-16V56A16,16,0,0,0,200,40Zm0,64H152V56h48v48Zm-96,32H56a16,16,0,0,0-16,16v48a16,16,0,0,0,16,16h48a16,16,0,0,0,16-16V152A16,16,0,0,0,104,136Zm0,64H56V152h48v48Zm96-64H152a16,16,0,0,0-16,16v48a16,16,0,0,0,16,16h48a16,16,0,0,0,16-16V152A16,16,0,0,0,200,136Zm0,64H152V152h48v48Z",
-  },
-  {
-    view: "generate",
-    label: "Génération",
-    icon: "M223.85,47.42a16,16,0,0,0-15.27-15.27c-16.79-.78-46.72,2.66-70.85,26.79L128,68.68V56a16,16,0,0,0-27.32-11.31L60.69,84.68A16,16,0,0,0,56,96v12.7l-8.9,8.9a16,16,0,0,0,0,22.62l19.6,19.6a16,16,0,0,0,22.63,0l8.9-8.9H112a16,16,0,0,0,11.31-4.69l40-40A16,16,0,0,0,168,94.63l9.74-9.74C201.19,61.44,224.64,64.21,223.85,47.42ZM72,96l40-40v28.68L83.31,113.37,72,102.06Zm40,56H97.94l29.37-29.37,11.32,11.32Zm54.4-78.79L143.16,96.44,159.56,112.8,182.79,89.6c14.14-14.15,17.5-32,17.06-41.45C190.4,47.71,172.55,51.07,158.4,65.2Z",
-  },
-  {
-    view: "editor",
-    label: "Éditeur de template",
-    icon: "M227.31,73.37,182.63,28.68a16,16,0,0,0-22.63,0L36.69,152A15.86,15.86,0,0,0,32,163.31V208a16,16,0,0,0,16,16H92.69A15.86,15.86,0,0,0,104,219.31L227.31,96a16,16,0,0,0,0-22.63ZM92.69,208H48V163.31l88-88L180.69,120ZM192,108.68,147.31,64l24-24L216,84.68Z",
-  },
-  {
-    view: "edit-tfvars",
-    label: "Éditeur tfvars",
-    icon: "M227.31,73.37,182.63,28.68a16,16,0,0,0-22.63,0L36.69,152A15.86,15.86,0,0,0,32,163.31V208a16,16,0,0,0,16,16H92.69A15.86,15.86,0,0,0,104,219.31L227.31,96a16,16,0,0,0,0-22.63ZM92.69,208H48V163.31l88-88L180.69,120ZM192,108.68,147.31,64l24-24L216,84.68Z",
-  },
-  {
-    view: "history",
-    label: "Historique",
-    icon: "M128,24A104,104,0,1,0,232,128,104.12,104.12,0,0,0,128,24Zm0,192a88,88,0,1,1,88-88A88.1,88.1,0,0,1,128,216Zm64-88a8,8,0,0,1-8,8H128a8,8,0,0,1-8-8V72a8,8,0,0,1,16,0v48h48A8,8,0,0,1,192,128Z",
-  },
-];
-
-function NavIcon({ path }: { path: string }) {
-  return (
-    <svg viewBox="0 0 256 256" fill="currentColor">
-      <path d={path} />
-    </svg>
-  );
-}
-
+/**
+ * v2 shell. Différences par rapport à v1 :
+ *  - nav répartie en deux groupes libellés, une icône distincte par entrée
+ *    et un compteur par entrée ;
+ *  - indicateur de santé API + identité utilisateur ; déconnexion en bouton icône ;
+ *  - le <h1> a migré dans l'AppHeader de chaque vue, qui porte le fil
+ *    d'Ariane, le titre, la recherche ⌘K et les actions principales.
+ */
 export default function AppShell() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -58,10 +31,10 @@ export default function AppShell() {
 
   const [view, setView] = React.useState<View>(initialView);
   const [generateTemplateId, setGenerateTemplateId] = React.useState<string | undefined>(
-    initialView === "generate" ? initialTemplate : undefined
+    initialView === "generate" ? initialTemplate : undefined,
   );
   const [editTemplateId, setEditTemplateId] = React.useState<string | undefined>(
-    initialView === "editor" ? initialTemplate : undefined
+    initialView === "editor" ? initialTemplate : undefined,
   );
 
   const [templates, setTemplates] = React.useState<ApiTemplate[]>([]);
@@ -87,103 +60,193 @@ export default function AppShell() {
     router.refresh();
   }
 
+  async function handleDelete(generation: ApiGeneration) {
+    if (
+      !confirm(
+        `Supprimer « ${generation.fileName} » et le .tfvars généré ? Cette action est irréversible.`,
+      )
+    )
+      return;
+    await fetch(`/api/generate/${generation.id}`, { method: "DELETE" });
+    refetchAll();
+  }
+
+  /** Générations non finalisées / bloquées. À remplacer par un vrai état de brouillon. */
+  const resumeItems: ResumeItem[] = React.useMemo(
+    () =>
+      generations
+        .filter((g) => !g.hasSourceFile)
+        .slice(0, 3)
+        .map((g) => ({
+          id: g.id,
+          fileName: g.fileName,
+          category: g.template.category,
+          detail: "Fiche source absente — réimporter pour rejouer la génération",
+          blocked: true,
+          action: "Corriger",
+        })),
+    [generations],
+  );
+
+  const NAV_GROUPS: { label: string; items: { view: View; label: string; icon: string; count?: string }[] }[] = [
+    {
+      label: "Pilotage",
+      items: [
+        { view: "dashboard", label: "Tableau de bord", icon: ICONS.dashboard },
+        {
+          view: "generate",
+          label: "Génération",
+          icon: ICONS.wand,
+          count: resumeItems.length ? String(resumeItems.length) : undefined,
+        },
+        {
+          view: "history",
+          label: "Historique",
+          icon: ICONS.clock,
+          count: generations.length ? String(generations.length) : undefined,
+        },
+      ],
+    },
+    {
+      label: "Bibliothèque",
+      items: [
+        {
+          view: "editor",
+          label: "Éditeur de template",
+          icon: ICONS.pencil,
+          count: templates.length ? String(templates.length) : undefined,
+        },
+        { view: "edit-tfvars", label: "Éditeur tfvars", icon: ICONS.brackets },
+      ],
+    },
+  ];
+
   return (
-    <div className="flex min-h-screen bg-background text-[14px] text-foreground">
-      <aside className="sticky top-0 flex h-screen w-64 shrink-0 flex-col gap-6 self-start bg-transparent p-3.5">
-        <div className="flex items-center gap-2.5 px-1.5">
-          <div className="grid size-8 place-items-center rounded-lg border border-border font-mono text-[13px] font-semibold text-accent">
+    <div className="flex min-h-screen bg-background text-[14px] tracking-[-0.003em] text-foreground">
+      <aside className="sticky top-0 flex h-screen w-61 shrink-0 flex-col gap-5.5 self-start bg-transparent p-3">
+        <div className="flex items-center gap-2.5 px-1.5 pt-0.5">
+          <div className="grid size-[30px] shrink-0 place-items-center rounded-[9px] border border-[#5C4420] bg-gradient-to-br from-accent/16 to-[#A8443C]/10 font-mono text-xs font-medium text-accent">
             tf
           </div>
-          <div className="flex flex-col gap-0.5">
-            <div className="text-base font-medium">TFGen</div>
-            <div className="font-mono text-[9.5px] text-muted-foreground">
-              terraform.digitalstack.cloud
-            </div>
+          <div className="flex min-w-0 flex-col gap-px">
+            <div className="text-[15px] font-semibold tracking-[-0.015em]">TFGen</div>
+            <div className="font-mono text-[9.5px] text-muted-foreground">digitalstack.cloud</div>
           </div>
         </div>
 
-        <nav className="flex flex-col gap-1">
-          <div className="px-2 pb-1.5 text-[9.5px] uppercase tracking-[0.14em] text-muted-foreground/80">
-            Pilotage
-          </div>
-          {NAV.map((item) => (
-            <NavItem
-              key={item.view}
-              active={view === item.view}
-              icon={<NavIcon path={item.icon} />}
-              onClick={() => setView(item.view)}
-            >
-              {item.label}
-            </NavItem>
+        <nav className="flex flex-col gap-4.5">
+          {NAV_GROUPS.map((group) => (
+            <div key={group.label} className="flex flex-col gap-0.5">
+              <div className="px-2 pb-1.5 text-[9.5px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                {group.label}
+              </div>
+              {group.items.map((item) => (
+                <NavItem
+                  key={item.view}
+                  active={view === item.view}
+                  icon={<Icon path={item.icon} />}
+                  count={item.count}
+                  onClick={() => setView(item.view)}
+                >
+                  {item.label}
+                </NavItem>
+              ))}
+            </div>
           ))}
         </nav>
 
-        <div className="mt-auto flex items-center border-t border-border pt-2.5">
-          <Button size="sm" variant="secondary" onClick={handleLogout} className="w-full justify-center">
-            Se déconnecter
-          </Button>
+        <div className="mt-auto flex flex-col gap-2.5">
+          <div className="flex items-center gap-2 rounded-[10px] border border-secondary bg-card px-2.5 py-2">
+            <span className="size-2 shrink-0 rounded-full bg-primary shadow-[0_0_0_3px_rgba(95,208,138,0.14)]" />
+            <div className="flex min-w-0 flex-col gap-px">
+              <span className="text-[11.5px] text-secondary-foreground">API opérationnelle</span>
+              <span className="font-mono text-[9.5px] text-muted-foreground">prisma · xlsx</span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2.5 border-t border-secondary pt-2.5">
+            <span className="grid size-[26px] shrink-0 place-items-center rounded-full border border-[#5C4420] bg-accent/13 text-[10.5px] font-semibold text-accent">
+              ML
+            </span>
+            <div className="flex min-w-0 flex-col">
+              <span className="truncate text-xs text-secondary-foreground">m.leroy</span>
+              <span className="text-[10px] text-muted-foreground">Infra Azure</span>
+            </div>
+            <button
+              type="button"
+              title="Se déconnecter"
+              onClick={handleLogout}
+              className="ml-auto grid size-[26px] shrink-0 place-items-center rounded-[7px] border border-border bg-transparent text-muted-foreground transition-colors hover:border-[#54302A] hover:text-destructive"
+            >
+              <Icon path={ICONS.signOut} size={14} />
+            </button>
+          </div>
         </div>
       </aside>
 
-      <main className="m-2.5 ml-0 flex flex-1 flex-col overflow-hidden rounded-2xl border border-border bg-[#121110]">
-        <header className="flex h-[50px] shrink-0 items-center gap-3.5 border-b border-border px-6.5">
-          <div className="font-mono text-[11.5px] text-muted-foreground">
-            tfgen / <span className="text-secondary-foreground">{view}</span>
+      <main className="m-2.5 ml-0 flex min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border bg-[#121110]">
+        {view === "dashboard" && (
+          <DashboardView
+            templates={templates}
+            generations={generations}
+            loading={loading}
+            resumeItems={resumeItems}
+            onEdit={(id) => {
+              setEditTemplateId(id);
+              setView("editor");
+            }}
+            onGenerate={(id) => {
+              setGenerateTemplateId(id);
+              setView("generate");
+            }}
+            onNewTemplate={() => {
+              setEditTemplateId(undefined);
+              setView("editor");
+            }}
+            onNewGeneration={() => {
+              setGenerateTemplateId(undefined);
+              setView("generate");
+            }}
+            onResume={() => setView("generate")}
+            onOpenHistory={() => setView("history")}
+            onDelete={handleDelete}
+          />
+        )}
+
+        {view !== "dashboard" && (
+          <div className="tfgen-scroll min-h-0 flex-1 overflow-y-auto">
+            <div className="max-w-[1180px] px-5.5 pb-14 pt-6">
+              {view === "generate" && (
+                <GenerateView
+                  key={generateTemplateId || "none"}
+                  templates={templates}
+                  initialTemplateId={generateTemplateId}
+                  onGenerated={refetchAll}
+                />
+              )}
+
+              {view === "editor" && (
+                <EditorView
+                  key={editTemplateId || "new"}
+                  templates={templates}
+                  initialTemplateId={editTemplateId}
+                  onSaved={() => {
+                    refetchAll();
+                    setView("dashboard");
+                  }}
+                />
+              )}
+
+              {view === "history" && (
+                <HistoryView generations={generations} loading={loading} onDeleted={refetchAll} />
+              )}
+
+              {view === "edit-tfvars" && (
+                <EditTfvarsView generations={generations} onSaved={refetchAll} />
+              )}
+            </div>
           </div>
-        </header>
-
-        <div className="max-w-[1240px] flex-1 p-6.5 pb-16">
-          {view === "dashboard" && (
-            <DashboardView
-              templates={templates}
-              generations={generations}
-              loading={loading}
-              onEdit={(id) => {
-                setEditTemplateId(id);
-                setView("editor");
-              }}
-              onGenerate={(id) => {
-                setGenerateTemplateId(id);
-                setView("generate");
-              }}
-              onNewTemplate={() => {
-                setEditTemplateId(undefined);
-                setView("editor");
-              }}
-              onNewGeneration={() => {
-                setGenerateTemplateId(undefined);
-                setView("generate");
-              }}
-            />
-          )}
-
-          {view === "generate" && (
-            <GenerateView
-              key={generateTemplateId || "none"}
-              templates={templates}
-              initialTemplateId={generateTemplateId}
-              onGenerated={refetchAll}
-            />
-          )}
-
-          {view === "editor" && (
-            <EditorView
-              key={editTemplateId || "new"}
-              templates={templates}
-              initialTemplateId={editTemplateId}
-              onSaved={() => {
-                refetchAll();
-                setView("dashboard");
-              }}
-            />
-          )}
-
-          {view === "history" && (
-            <HistoryView generations={generations} loading={loading} onDeleted={refetchAll} />
-          )}
-
-          {view === "edit-tfvars" && <EditTfvarsView generations={generations} onSaved={refetchAll} />}
-        </div>
+        )}
       </main>
     </div>
   );

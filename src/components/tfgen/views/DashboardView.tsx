@@ -1,137 +1,164 @@
 "use client";
 
-import { useMemo } from "react";
-import { Button } from "@/components/ui/button";
-import { TemplateCard, type TemplateSummary } from "../template-card";
-import { ApiGeneration, ApiTemplate, CATEGORY_LABELS, formatRelative, toDesignCategory } from "./shared";
+import { useMemo, useState } from "react";
+import { AppHeader, HeaderAction } from "../app-header";
+import { ICONS } from "../icons";
+import { FAMILIES, metaFor } from "../category-meta";
+import { ResumeQueue, type ResumeItem } from "../resume-queue";
+import { TemplateCard, TemplateCardSkeleton, type TemplateCardData } from "../template-card";
+import { GenerationsTable } from "../generations-table";
+import { ApiGeneration, ApiTemplate, CATEGORY_LABELS, formatRelative } from "./shared";
 
+/**
+ * v2 dashboard. Trois changements par rapport à v1 :
+ *  1. les trois compteurs décoratifs sont remplacés par la file "Reprendre" ;
+ *  2. les templates gagnent un filtre par famille (Socle / Compute / Réseau / Données) ;
+ *  3. le bloc des dernières générations réutilise le vrai tableau + badges de
+ *     catégorie au lieu d'un doublon plus faible.
+ *
+ * Le <h1> vit désormais dans AppHeader, cette vue démarre donc au contenu.
+ */
 export default function DashboardView({
   templates,
   generations,
   loading,
+  resumeItems = [],
   onEdit,
   onGenerate,
   onNewTemplate,
   onNewGeneration,
+  onResume,
+  onOpenHistory,
+  onDelete,
+  onSearch,
 }: {
   templates: ApiTemplate[];
   generations: ApiGeneration[];
   loading: boolean;
+  resumeItems?: ResumeItem[];
   onEdit: (id: string) => void;
   onGenerate: (id: string) => void;
   onNewTemplate: () => void;
   onNewGeneration: () => void;
+  onResume: (item: ResumeItem) => void;
+  onOpenHistory: () => void;
+  onDelete?: (generation: ApiGeneration) => void;
+  onSearch?: () => void;
 }) {
-  const stats = useMemo(() => {
-    const variableCount = templates.reduce((acc, t) => acc + t.variables.length, 0);
-    const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
-    const recentGenerations = generations.filter((g) => new Date(g.createdAt).getTime() >= thirtyDaysAgo);
-    return {
-      templates: templates.length,
-      generations30d: recentGenerations.length,
-      variables: variableCount,
-    };
-  }, [templates, generations]);
+  const [family, setFamily] = useState<string>("Tous");
 
-  const summaries: TemplateSummary[] = templates.map((t) => ({
-    id: t.name,
-    category: toDesignCategory(t.category),
-    description: t.description || CATEGORY_LABELS[t.category] || t.category,
-    variableCount: t.variables.length,
-    updatedAt: formatRelative(t.updatedAt),
-    version: "",
-  }));
+  const cards: TemplateCardData[] = useMemo(
+    () =>
+      templates.map((t) => ({
+        id: t.id,
+        name: t.name,
+        category: t.category,
+        description: t.description || CATEGORY_LABELS[t.category] || t.category,
+        variableCount: t.variables.length,
+        updatedAt: formatRelative(t.updatedAt),
+      })),
+    [templates],
+  );
+
+  const visible = useMemo(
+    () => (family === "Tous" ? cards : cards.filter((c) => metaFor(c.category).family === family)),
+    [cards, family],
+  );
 
   return (
-    <div className="flex flex-col gap-7.5">
-      <div className="flex flex-wrap items-end gap-5">
-        <div className="min-w-65 flex-1">
-          <h1 className="mb-1.5 text-[30px] font-semibold">Tableau de bord</h1>
-          <p className="m-0 text-muted-foreground">
-            {templates.length} template{templates.length > 1 ? "s" : ""} publié{templates.length > 1 ? "s" : ""}
-            {generations[0] ? ` · dernière génération ${formatRelative(generations[0].createdAt)}` : ""}
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button onClick={onNewTemplate}>+ Nouveau template</Button>
-          <Button variant="default" onClick={onNewGeneration}>
-            Nouvelle génération
-          </Button>
-        </div>
-      </div>
+    <>
+      <AppHeader
+        breadcrumb={["tableau de bord"]}
+        title="Tableau de bord"
+        onSearch={onSearch}
+        actions={
+          <>
+            <HeaderAction icon={ICONS.plus} onClick={onNewTemplate}>
+              Nouveau template
+            </HeaderAction>
+            <HeaderAction tone="primary" icon={ICONS.wand} onClick={onNewGeneration}>
+              Nouvelle génération
+            </HeaderAction>
+          </>
+        }
+      />
 
-      <div className="grid grid-cols-3 gap-3">
-        {[
-          ["Templates actifs", String(stats.templates)],
-          ["Générations · 30 j", String(stats.generations30d)],
-          ["Variables suivies", String(stats.variables)],
-        ].map(([label, value]) => (
-          <div
-            key={label}
-            className="flex flex-col gap-1.5 rounded-xl border border-border bg-card px-4 py-3.5"
-          >
-            <div className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">{label}</div>
-            <div className="font-mono text-[26px] text-foreground">{value}</div>
-          </div>
-        ))}
-      </div>
+      <div className="tfgen-scroll min-h-0 flex-1 overflow-y-auto">
+        <div className="flex max-w-[1180px] flex-col gap-7.5 px-5.5 pb-14 pt-6">
+          <ResumeQueue items={resumeItems} onResume={onResume} />
 
-      <div className="flex flex-col gap-3.5">
-        <h2 className="m-0 text-[19px] font-semibold">Templates</h2>
-        {loading ? (
-          <p className="text-[13px] text-muted-foreground">Chargement...</p>
-        ) : templates.length === 0 ? (
-          <p className="text-[13px] text-muted-foreground">
-            Aucun template pour le moment.{" "}
-            <button
-              type="button"
-              onClick={onNewTemplate}
-              className="cursor-pointer bg-transparent text-accent underline"
-            >
-              En créer un
-            </button>
-          </p>
-        ) : (
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-3">
-            {templates.map((t, i) => (
-              <TemplateCard
-                key={t.id}
-                template={summaries[i]}
-                onEdit={() => onEdit(t.id)}
-                onGenerate={() => onGenerate(t.id)}
-              />
-            ))}
-          </div>
-        )}
-      </div>
-
-      <div className="flex flex-col gap-3">
-        <h2 className="m-0 text-[19px] font-semibold">Historique</h2>
-        <div className="overflow-hidden rounded-xl border border-border bg-card">
-          {generations.length === 0 ? (
-            <div className="p-4 text-[12.5px] text-muted-foreground">
-              Aucune génération pour le moment.
-            </div>
-          ) : (
-            generations.slice(0, 8).map((g) => (
-              <div
-                key={g.id}
-                className="grid grid-cols-[1.6fr_1.2fr_0.9fr_auto] items-center gap-3 border-b border-border px-4 py-2.5 last:border-b-0"
-              >
-                <div className="font-mono text-[12.5px] text-secondary-foreground">{g.fileName}</div>
-                <div className="font-mono text-xs text-accent">{g.template.name}</div>
-                <div className="text-xs text-muted-foreground">{formatRelative(g.createdAt)}</div>
-                <a
-                  href={`/api/generate/${g.id}/download`}
-                  className="text-[11.5px] text-muted-foreground underline"
-                >
-                  Télécharger
-                </a>
+          <section className="flex flex-col gap-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <h2 className="m-0 text-[14px] font-semibold tracking-[-0.01em]">Templates</h2>
+              <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
+                {visible.length} / {cards.length}
+              </span>
+              <div className="ml-auto flex gap-0.5 rounded-full border border-secondary bg-[#171613] p-0.5">
+                {FAMILIES.map((f) => (
+                  <button
+                    key={f}
+                    type="button"
+                    onClick={() => setFamily(f)}
+                    className={`rounded-full px-2.5 py-1 text-[11.5px] font-medium transition-colors ${
+                      family === f
+                        ? "bg-secondary text-foreground"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {f}
+                  </button>
+                ))}
               </div>
-            ))
-          )}
+            </div>
+
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(296px,1fr))] gap-2.5">
+              {loading ? (
+                [0, 160, 320].map((d) => <TemplateCardSkeleton key={d} delay={d} />)
+              ) : visible.length === 0 ? (
+                <p className="text-[13px] text-muted-foreground">
+                  Aucun template dans cette famille.{" "}
+                  <button
+                    type="button"
+                    onClick={onNewTemplate}
+                    className="cursor-pointer bg-transparent text-accent underline"
+                  >
+                    En créer un
+                  </button>
+                </p>
+              ) : (
+                visible.map((card) => (
+                  <TemplateCard
+                    key={card.id}
+                    template={card}
+                    onEdit={() => onEdit(card.id)}
+                    onGenerate={() => onGenerate(card.id)}
+                  />
+                ))
+              )}
+            </div>
+          </section>
+
+          <section className="flex flex-col gap-3">
+            <div className="flex items-center gap-3">
+              <h2 className="m-0 text-[14px] font-semibold tracking-[-0.01em]">
+                Dernières générations
+              </h2>
+              <button
+                type="button"
+                onClick={onOpenHistory}
+                className="ml-auto rounded-lg border border-transparent px-2.5 py-1 text-xs font-medium text-accent transition-colors hover:bg-accent/10"
+              >
+                Tout l&apos;historique →
+              </button>
+            </div>
+            <GenerationsTable
+              generations={generations.slice(0, 6)}
+              loading={loading}
+              onDelete={onDelete}
+            />
+          </section>
         </div>
       </div>
-    </div>
+    </>
   );
 }

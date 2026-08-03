@@ -1,19 +1,22 @@
 "use client";
 
+import * as React from "react";
 import { cn } from "@/lib/utils";
 
 /**
- * Sidebar item. The active state is a 1px gradient outline
- * (padding-box / border-box trick) over the page ground.
+ * Sidebar item — v2.
+ * Active state is a filled chip (no gradient outline) plus an optional count.
  */
 export function NavItem({
   active,
   icon,
+  count,
   onClick,
   children,
 }: {
   active?: boolean;
   icon: React.ReactNode;
+  count?: string | number;
   onClick?: () => void;
   children: React.ReactNode;
 }) {
@@ -22,20 +25,26 @@ export function NavItem({
       type="button"
       onClick={onClick}
       className={cn(
-        "flex w-full items-center gap-2.5 rounded-lg border border-transparent px-2.5 py-2 text-left text-sm transition-colors",
-        active ? "text-foreground" : "text-muted-foreground hover:bg-popover hover:text-foreground",
-      )}
-      style={
+        "flex w-full items-center gap-2.5 rounded-[9px] border border-transparent px-2.5 py-1.5 text-left text-[13px] font-medium transition-colors",
         active
-          ? {
-              background:
-                "linear-gradient(var(--background), var(--background)) padding-box, var(--nav-active) border-box",
-            }
-          : undefined
-      }
+          ? "bg-popover text-foreground"
+          : "text-muted-foreground hover:bg-card hover:text-foreground",
+      )}
     >
-      <span className="[&_svg]:size-4">{icon}</span>
-      {children}
+      <span className={cn("shrink-0 [&_svg]:size-4", active ? "opacity-100" : "opacity-70")}>
+        {icon}
+      </span>
+      <span className="min-w-0 flex-1 truncate">{children}</span>
+      {count !== undefined && count !== "" && (
+        <span
+          className={cn(
+            "rounded-full px-1.5 py-px font-mono text-[10px] tabular-nums",
+            active ? "bg-accent/12 text-[#F3C88C]" : "bg-secondary text-muted-foreground",
+          )}
+        >
+          {count}
+        </span>
+      )}
     </button>
   );
 }
