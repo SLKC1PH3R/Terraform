@@ -94,8 +94,7 @@ export default function AppShell() {
         style={{
           width: 256,
           flex: "0 0 256px",
-          borderRight: `1px solid ${color.border}`,
-          background: color.surface,
+          background: "transparent",
           padding: "18px 14px",
           display: "flex",
           flexDirection: "column",
@@ -189,7 +188,19 @@ export default function AppShell() {
         </div>
       </aside>
 
-      <main style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
+      <main
+        style={{
+          flex: 1,
+          minWidth: 0,
+          display: "flex",
+          flexDirection: "column",
+          margin: "10px 10px 10px 0",
+          border: `1px solid ${color.border}`,
+          borderRadius: 16,
+          background: "#121110",
+          overflow: "hidden",
+        }}
+      >
         <header
           style={{
             height: 50,
