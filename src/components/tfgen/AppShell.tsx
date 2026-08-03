@@ -10,6 +10,7 @@ import EditorView from "./views/EditorView";
 import HistoryView from "./views/HistoryView";
 import EditTfvarsView from "./views/EditTfvarsView";
 import type { ResumeItem } from "./resume-queue";
+import { SearchDialog } from "./search-dialog";
 import { ApiGeneration, ApiTemplate } from "./views/shared";
 
 type View = "dashboard" | "generate" | "editor" | "history" | "edit-tfvars";
@@ -40,6 +41,7 @@ export default function AppShell() {
   const [templates, setTemplates] = React.useState<ApiTemplate[]>([]);
   const [generations, setGenerations] = React.useState<ApiGeneration[]>([]);
   const [loading, setLoading] = React.useState(true);
+  const [searchOpen, setSearchOpen] = React.useState(false);
 
   const refetchAll = React.useCallback(async () => {
     const [t, g] = await Promise.all([
@@ -53,6 +55,17 @@ export default function AppShell() {
   React.useEffect(() => {
     refetchAll().finally(() => setLoading(false));
   }, [refetchAll]);
+
+  React.useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setSearchOpen(true);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   async function handleLogout() {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -210,6 +223,7 @@ export default function AppShell() {
             onResume={() => setView("generate")}
             onOpenHistory={() => setView("history")}
             onDelete={handleDelete}
+            onSearch={() => setSearchOpen(true)}
           />
         )}
 
@@ -248,6 +262,22 @@ export default function AppShell() {
           </div>
         )}
       </main>
+
+      <SearchDialog
+        open={searchOpen}
+        onClose={() => setSearchOpen(false)}
+        templates={templates}
+        generations={generations}
+        onSelectTemplate={(id) => {
+          setEditTemplateId(id);
+          setView("editor");
+          setSearchOpen(false);
+        }}
+        onSelectGeneration={(g) => {
+          window.open(`/api/generate/${g.id}/download`, "_blank");
+          setSearchOpen(false);
+        }}
+      />
     </div>
   );
 }
