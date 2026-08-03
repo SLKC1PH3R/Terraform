@@ -1,17 +1,16 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import {
-  Button,
-  CategoryBadge,
-  CategoryTile,
-  StatusPill,
-  Stepper,
-  TfvarsPreview,
-  UploadZone,
-  VariableSection,
-} from "../components";
-import { deriveRgExtractedFields, deriveVmExtractedFields } from "@/lib/tfvars-generator";
+import { Button } from "@/components/ui/button";
+import { CategoryBadge, CategoryTile } from "../categories";
+import { StatusPill } from "../status-pill";
+import { Stepper } from "../stepper";
+import { TfvarsPreview } from "../tfvars-preview";
+import { UploadZone } from "../upload-zone";
+import { VariableSection } from "../variable-section";
+import { ReviewWorkbench } from "../review-workbench";
+import { cn } from "@/lib/utils";
+import { buildTfvars, deriveRgExtractedFields, deriveVmExtractedFields } from "@/lib/tfvars-generator";
 import { isStorageAccountTemplate } from "@/lib/storage-account-generator";
 import { ApiTemplate, ApiTemplateVariable, CATEGORY_LABELS, toDesignCategory } from "./shared";
 import { buildSections, contentToLines, deriveFileName, rowState, type BuildResult, type Row } from "./tfvarsRender";
@@ -161,6 +160,7 @@ export default function GenerateView({
   const [error, setError] = useState("");
   const [generating, setGenerating] = useState(false);
   const [result, setResult] = useState<BuildResult | null>(null);
+  const [diffOnly, setDiffOnly] = useState(false);
 
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [batchRunning, setBatchRunning] = useState(false);
@@ -172,7 +172,6 @@ export default function GenerateView({
 
   const [saExtractedList, setSaExtractedList] = useState<{ key: string; value: string }[][]>([]);
 
-  const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
   const [openRgSections, setOpenRgSections] = useState<Record<string, boolean>>({});
 
   const selectedTemplate = templates.find((t) => t.id === templateId);
@@ -186,6 +185,17 @@ export default function GenerateView({
     () => (rgInfo ? buildSections(`Resource Group rg-${rgInfo.serviceFullname}-${rgInfo.env}-xxx`, "RG", rgInfo.rows) : []),
     [rgInfo]
   );
+
+  // Aperçu .tfvars live : recalculé côté client à chaque édition d'une valeur,
+  // sans attendre la génération serveur — c'est le volet droit de l'atelier
+  // de revue (étape 3).
+  const livePreview = useMemo(() => {
+    if (!selectedTemplate || rows.length === 0) return null;
+    return buildTfvars(
+      rows.map((r) => ({ name: r.name, type: r.type, defaultValue: r.defaultValue, finalValue: r.finalValue, group: r.group })),
+      selectedTemplate.tfContent
+    );
+  }, [selectedTemplate, rows]);
 
   const modifiedCount = rows.filter((r) => rowState(r) === "modified").length;
   const defaultCount = rows.length - modifiedCount;
@@ -268,7 +278,6 @@ export default function GenerateView({
     setFileName(uf.fileName);
     setSourceFile(uf.file);
     setRows(matchRows(selectedTemplate.variables, uf.extracted));
-    setOpenSections({});
     setStep(3);
     setupRgInfo(uf);
   }
@@ -291,7 +300,6 @@ export default function GenerateView({
     setRows(combined);
     setFileName(uploadedFiles.map((f) => f.fileName).join(" + "));
     setSourceFile(uploadedFiles[0].file);
-    setOpenSections({});
     setStep(3);
     setupRgInfo(uploadedFiles[0]);
   }
@@ -471,8 +479,8 @@ export default function GenerateView({
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 26 }}>
-      <h1 style={{ fontSize: 30, margin: 0, fontWeight: 600 }}>Génération</h1>
+    <div className="flex flex-col gap-6.5">
+      <h1 className="m-0 text-[30px] font-semibold">Génération</h1>
 
       <Stepper
         current={step}
@@ -499,11 +507,11 @@ export default function GenerateView({
         ]}
       />
 
-      {error && <p style={{ color: "#F87171", fontSize: 13 }}>{error}</p>}
+      {error && <p className="text-[13px] text-destructive">{error}</p>}
 
       {step === 1 && (
         <>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 10 }}>
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-2.5">
             {templates.map((t) => (
               <button
                 key={t.id}
@@ -512,35 +520,26 @@ export default function GenerateView({
                   setTemplateId(t.id);
                   resetUploadState();
                 }}
-                style={{
-                  textAlign: "left",
-                  font: "inherit",
-                  cursor: "pointer",
-                  padding: 14,
-                  borderRadius: 12,
-                  background: "#1A1815",
-                  border: `1px solid ${t.id === templateId ? "#E9A23B" : "#2A2723"}`,
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 9,
-                  color: "#F5F2ED",
-                }}
+                className={cn(
+                  "flex flex-col gap-2.5 rounded-xl border bg-card p-3.5 text-left text-foreground",
+                  t.id === templateId ? "border-accent" : "border-border",
+                )}
               >
-                <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
-                  <CategoryTile category={toDesignCategory(t.category)} size={26} />
-                  <span style={{ fontFamily: "monospace", fontSize: 13.5, color: "#F3C88C" }}>{t.name}</span>
-                  <span style={{ marginLeft: "auto" }}>
-                    <CategoryBadge category={toDesignCategory(t.category)} size="sm" />
+                <div className="flex items-center gap-2.5">
+                  <CategoryTile category={toDesignCategory(t.category)} className="size-[26px]" />
+                  <span className="font-mono text-[13.5px] text-accent">{t.name}</span>
+                  <span className="ml-auto">
+                    <CategoryBadge category={toDesignCategory(t.category)} />
                   </span>
                 </div>
-                <div style={{ fontSize: 12.5, color: "#A8A199", lineHeight: 1.5 }}>
+                <div className="text-[12.5px] leading-relaxed text-muted-foreground">
                   {t.description || CATEGORY_LABELS[t.category]} · {t.variables.length} variables
                 </div>
               </button>
             ))}
           </div>
-          <div style={{ display: "flex", justifyContent: "flex-end" }}>
-            <Button variant="primary" disabled={!templateId} onClick={() => setStep(2)}>
+          <div className="flex justify-end">
+            <Button variant="default" disabled={!templateId} onClick={() => setStep(2)}>
               Continuer
             </Button>
           </div>
@@ -553,45 +552,23 @@ export default function GenerateView({
             onPick={handleAddFile}
             hint="Formats .xlsx et .xlsm · plusieurs fiches possibles (une par VM à générer ou fusionner)."
           />
-          {uploading && <p style={{ color: "#A8A199", fontSize: 13 }}>Lecture du fichier...</p>}
+          {uploading && <p className="text-[13px] text-muted-foreground">Lecture du fichier...</p>}
 
           {uploadedFiles.length > 0 && (
-            <div
-              style={{
-                borderRadius: 12,
-                background: "#1A1815",
-                boxShadow: "0 0 0 1px #2A2723",
-                overflow: "hidden",
-              }}
-            >
+            <div className="overflow-hidden rounded-xl border border-border bg-card">
               {uploadedFiles.map((uf, i) => (
                 <div
                   key={i}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 10,
-                    padding: "10px 14px",
-                    borderBottom: i < uploadedFiles.length - 1 ? "1px solid #2A2723" : undefined,
-                  }}
+                  className="flex items-center gap-2.5 border-b border-border px-3.5 py-2.5 last:border-b-0"
                 >
-                  <span
-                    style={{
-                      fontFamily: "monospace",
-                      fontSize: 10.5,
-                      color: "#F3C88C",
-                      border: "1px solid #5C4420",
-                      borderRadius: 4,
-                      padding: "1px 6px",
-                    }}
-                  >
+                  <span className="rounded border border-accent/40 px-1.5 py-px font-mono text-[10.5px] text-accent">
                     {isStorageAccount ? "Fiche" : `VM${i + 1}`}
                   </span>
-                  <span style={{ fontFamily: "monospace", fontSize: 12.5, color: "#DED8CF" }}>{uf.fileName}</span>
+                  <span className="font-mono text-[12.5px] text-secondary-foreground">{uf.fileName}</span>
                   <button
                     type="button"
                     onClick={() => removeUploadedFile(i)}
-                    style={{ marginLeft: "auto", background: "none", border: 0, color: "#7A736A", cursor: "pointer", fontSize: 16, lineHeight: 1 }}
+                    className="ml-auto border-0 bg-transparent text-base leading-none text-muted-foreground"
                     title="Retirer cette fiche"
                   >
                     ×
@@ -602,7 +579,7 @@ export default function GenerateView({
           )}
 
           {!isStorageAccount && uploadedFiles.length >= 2 && (
-            <p style={{ color: "#A8A199", fontSize: 12.5 }}>
+            <p className="text-[12.5px] text-muted-foreground">
               {uploadedFiles.length} fiches importées : générez un .tfvars séparé par fiche, ou fusionnez-les en un
               seul .tfvars (la 1ère fiche garde les noms de variables tels quels, les suivantes sont préfixées
               vm2_, vm3_, ...).
@@ -610,24 +587,24 @@ export default function GenerateView({
           )}
 
           {isStorageAccount && uploadedFiles.length >= 2 && (
-            <p style={{ color: "#A8A199", fontSize: 12.5 }}>
+            <p className="text-[12.5px] text-muted-foreground">
               {uploadedFiles.length} fiches importées : elles seront toutes générées dans le même .tfvars, un compte
               de stockage par fiche dans SA_list (env/service_fullname/RG/tags communs déduits de la 1ère fiche).
             </p>
           )}
 
-          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap" }}>
+          <div className="flex flex-wrap justify-end gap-2">
             <Button onClick={() => setStep(1)}>Retour</Button>
             {isStorageAccount ? (
               uploadedFiles.length >= 1 && (
-                <Button variant="primary" onClick={proceedToStorageReview}>
+                <Button variant="default" onClick={proceedToStorageReview}>
                   Continuer
                 </Button>
               )
             ) : (
               <>
                 {uploadedFiles.length === 1 && (
-                  <Button variant="primary" onClick={proceedSingle}>
+                  <Button variant="default" onClick={proceedSingle}>
                     Continuer
                   </Button>
                 )}
@@ -649,7 +626,7 @@ export default function GenerateView({
 
       {step === 3 && isStorageAccount && saExtractedList.length > 0 && (
         <>
-          <p style={{ color: "#A8A199", fontSize: 12.5 }}>
+          <p className="text-[12.5px] text-muted-foreground">
             {saExtractedList.length > 1
               ? `${saExtractedList.length} comptes de stockage seront générés dans le même .tfvars.`
               : "Champs lus dans la fiche."}{" "}
@@ -658,67 +635,28 @@ export default function GenerateView({
           </p>
 
           {saExtractedList.map((entries, fileIndex) => (
-            <div key={fileIndex} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <div key={fileIndex} className="flex flex-col gap-2">
               {saExtractedList.length > 1 && (
-                <div style={{ fontFamily: "monospace", fontSize: 12, color: "#F3C88C" }}>
+                <div className="font-mono text-xs text-accent">
                   Compte {fileIndex + 1} — {uploadedFiles[fileIndex]?.fileName}
                 </div>
               )}
-              <div
-                style={{
-                  borderRadius: 12,
-                  background: "#1A1815",
-                  boxShadow: "0 0 0 1px #2A2723",
-                  overflow: "hidden",
-                }}
-              >
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "1.1fr 1.9fr",
-                    gap: 12,
-                    padding: "8px 14px",
-                    borderBottom: "1px solid #2A2723",
-                    fontSize: 9.5,
-                    letterSpacing: "0.12em",
-                    textTransform: "uppercase",
-                    color: "#7A736A",
-                  }}
-                >
+              <div className="overflow-hidden rounded-xl border border-border bg-card">
+                <div className="grid grid-cols-[1.1fr_1.9fr] gap-3 border-b border-border px-3.5 py-2 text-[9.5px] uppercase tracking-[0.12em] text-muted-foreground">
                   <div>Champ</div>
                   <div>Valeur</div>
                 </div>
                 {entries.map((e, i) => (
                   <div
                     key={i}
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "1.1fr 1.9fr",
-                      gap: 12,
-                      alignItems: "center",
-                      padding: "6px 14px",
-                      borderBottom: i < entries.length - 1 ? "1px solid #2A2723" : undefined,
-                    }}
+                    className="grid grid-cols-[1.1fr_1.9fr] items-center gap-3 border-b border-border px-3.5 py-1.5 last:border-b-0"
                   >
-                    <span style={{ fontFamily: "monospace", fontSize: 12, color: "#DED8CF", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {e.key}
-                    </span>
+                    <span className="truncate font-mono text-xs text-secondary-foreground">{e.key}</span>
                     <textarea
                       value={e.value}
                       onChange={(ev) => updateSaExtracted(fileIndex, i, ev.target.value)}
                       rows={e.value.includes("\n") ? Math.min(6, e.value.split("\n").length) : 1}
-                      style={{
-                        width: "100%",
-                        boxSizing: "border-box",
-                        fontFamily: "monospace",
-                        fontSize: 12,
-                        padding: "4px 8px",
-                        borderRadius: 6,
-                        border: "1px solid #38342E",
-                        background: "#100E0C",
-                        color: "#F5F2ED",
-                        resize: "vertical",
-                      }}
+                      className="w-full resize-y rounded-md border border-border bg-code px-2 py-1 font-mono text-xs text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     />
                   </div>
                 ))}
@@ -726,7 +664,7 @@ export default function GenerateView({
             </div>
           ))}
 
-          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+          <div className="flex justify-end gap-2">
             <Button onClick={() => setStep(2)}>Retour</Button>
             <Button variant="generate" onClick={proceedStorageAccount} disabled={generating}>
               {generating ? "Génération..." : "Générer le .tfvars"}
@@ -737,41 +675,25 @@ export default function GenerateView({
 
       {step === 3 && !isStorageAccount && rows.length > 0 && (
         <>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-            <StatusPill tone="ok">{modifiedCount} modifiées</StatusPill>
-            <StatusPill tone="neutral">{defaultCount} par défaut</StatusPill>
-          </div>
-
-          <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
-            {sections.map((s) => (
-              <VariableSection
-                key={s.id}
-                section={s}
-                open={openSections[s.id] !== false}
-                onToggle={() => setOpenSections((p) => ({ ...p, [s.id]: p[s.id] === false ? true : false }))}
-                onRowChange={(i, value) => updateRowByIdentity(s.id === "_root" ? "" : s.id, s.rows[i].name, value)}
-              />
-            ))}
-          </div>
+          <ReviewWorkbench
+            sections={sections}
+            lines={livePreview ? contentToLines(livePreview.content, livePreview.diff) : []}
+            diffOnly={diffOnly}
+            onDiffOnlyChange={setDiffOnly}
+            onGenerate={handleGenerate}
+            onValueChange={(sectionId, rowName, value) =>
+              updateRowByIdentity(sectionId === "_root" ? "" : sectionId, rowName, value)
+            }
+          />
 
           {rgInfo && (
-            <div
-              style={{
-                borderRadius: 12,
-                background: "#1A1815",
-                boxShadow: "0 0 0 1px #2A2723",
-                padding: 14,
-                display: "flex",
-                flexDirection: "column",
-                gap: 12,
-              }}
-            >
-              <label style={{ display: "flex", alignItems: "flex-start", gap: 8, fontSize: 13, cursor: "pointer" }}>
+            <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-3.5">
+              <label className="flex cursor-pointer items-start gap-2 text-[13px]">
                 <input
                   type="checkbox"
                   checked={createRg}
                   onChange={(e) => setCreateRg(e.target.checked)}
-                  style={{ marginTop: 3 }}
+                  className="mt-0.5"
                 />
                 <span>
                   Le Resource Group <code>rg-{rgInfo.serviceFullname}-{rgInfo.env}-xxx</code> n'existe pas encore
@@ -780,7 +702,7 @@ export default function GenerateView({
               </label>
 
               {createRg && (
-                <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
+                <div className="flex flex-col gap-2.5">
                   {rgSections.map((s) => (
                     <VariableSection
                       key={s.id}
@@ -799,7 +721,7 @@ export default function GenerateView({
             </div>
           )}
 
-          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+          <div className="flex justify-end gap-2">
             <Button onClick={() => setStep(2)}>Retour</Button>
             <Button variant="generate" onClick={handleGenerate} disabled={generating}>
               {generating ? "Génération..." : "Générer le .tfvars"}
@@ -809,37 +731,22 @@ export default function GenerateView({
       )}
 
       {step === 4 && batchResults.length > 0 && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          <h2 style={{ fontSize: 18, margin: 0, fontWeight: 600 }}>
-            Résultats — {batchResults.length} fiches
-          </h2>
-          <div
-            style={{
-              borderRadius: 12,
-              background: "#1A1815",
-              boxShadow: "0 0 0 1px #2A2723",
-              overflow: "hidden",
-            }}
-          >
+        <div className="flex flex-col gap-2.5">
+          <h2 className="m-0 text-[18px] font-semibold">Résultats — {batchResults.length} fiches</h2>
+          <div className="overflow-hidden rounded-xl border border-border bg-card">
             {batchResults.map((br, i) => (
               <div
                 key={i}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 10,
-                  padding: "11px 16px",
-                  borderBottom: i < batchResults.length - 1 ? "1px solid #2A2723" : undefined,
-                }}
+                className="flex items-center gap-2.5 border-b border-border px-4 py-2.5 last:border-b-0"
               >
-                <span style={{ fontFamily: "monospace", fontSize: 12.5, color: "#DED8CF" }}>{br.fileName}</span>
-                <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
+                <span className="font-mono text-[12.5px] text-secondary-foreground">{br.fileName}</span>
+                <div className="ml-auto flex items-center gap-2">
                   {br.result ? (
                     <>
                       <StatusPill tone="ok">généré</StatusPill>
                       <Button
                         size="sm"
-                        variant="primary"
+                        variant="default"
                         onClick={() => window.open(`/api/generate/${br.result!.id}/download`, "_blank")}
                       >
                         Télécharger
@@ -857,10 +764,10 @@ export default function GenerateView({
 
       {step === 4 && result && (
         <>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div className="flex items-center gap-2.5">
             <StatusPill tone="ok">{result.diff.filter((d) => d.changed).length} lignes surlignées</StatusPill>
-            <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
-              <Button variant="primary" onClick={() => window.open(`/api/generate/${result.id}/download`, "_blank")}>
+            <div className="ml-auto flex gap-2">
+              <Button variant="default" onClick={() => window.open(`/api/generate/${result.id}/download`, "_blank")}>
                 Télécharger le .tfvars
               </Button>
             </div>
@@ -873,12 +780,12 @@ export default function GenerateView({
 
           {rgResult && (
             <>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <span style={{ fontSize: 13, color: "#A8A199" }}>
+              <div className="flex items-center gap-2.5">
+                <span className="text-[13px] text-muted-foreground">
                   Resource Group rg-{rgInfo?.serviceFullname}-{rgInfo?.env}-xxx
                 </span>
-                <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
-                  <Button variant="primary" onClick={() => window.open(`/api/generate/${rgResult.id}/download`, "_blank")}>
+                <div className="ml-auto flex gap-2">
+                  <Button variant="default" onClick={() => window.open(`/api/generate/${rgResult.id}/download`, "_blank")}>
                     Télécharger le .tfvars du RG
                   </Button>
                 </div>

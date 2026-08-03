@@ -1,36 +1,133 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+@import "tw-animate-css";
 
-body {
-  font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+/* TFGen — graphite chaud. shadcn/ui token names, so any 21st.dev component
+   dropped in via the shadcn CLI inherits the theme with no edits. */
+
+:root, .dark {
+  --radius: 0.75rem;
+
+  --background: #0D0C0A;
+  --foreground: #F5F2ED;
+
+  --card: #1A1815;
+  --card-foreground: #F5F2ED;
+  --popover: #1F1D19;
+  --popover-foreground: #F5F2ED;
+
+  /* main action */
+  --primary: #5FD08A;
+  --primary-foreground: #0D0C0A;
+
+  --secondary: #221F1B;
+  --secondary-foreground: #DED8CF;
+
+  --muted: #221F1B;
+  --muted-foreground: #A8A199;
+
+  /* templates / generation */
+  --accent: #E9A23B;
+  --accent-foreground: #0D0C0A;
+
+  --destructive: #EF4444;
+  --destructive-foreground: #F5F2ED;
+
+  --border: #2A2723;
+  --input: #2A2723;
+  --ring: #E9A23B;
+
+  --chart-1: #E9A23B;
+  --chart-2: #5FD08A;
+  --chart-3: #7EB6F5;
+  --chart-4: #CBA0FB;
+  --chart-5: #F49CC4;
+
+  --sidebar: transparent;
+  --sidebar-foreground: #A8A199;
+  --sidebar-accent: #1F1D19;
+  --sidebar-accent-foreground: #F5F2ED;
+  --sidebar-border: #2A2723;
+  --sidebar-ring: #E9A23B;
+
+  /* TFGen-specific roles */
+  --diff: #5FD08A;
+  --diff-foreground: #B6EBCB;
+  --diff-surface: rgba(95, 208, 138, 0.09);
+  --code: #100E0C;
+  --code-key: #E5B378;
+  --code-string: #A6E0BF;
+  --code-number: #F2B672;
+  --code-comment: #6A635A;
+  --code-gutter: #4B463F;
+  --nav-active: linear-gradient(115deg, #F6C177, #E9A23B 38%, #D2694B 76%, #A8443C);
 }
 
-.card {
-  @apply bg-slate-900 border border-slate-800 rounded-xl p-5;
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-diff: var(--diff);
+  --color-diff-foreground: var(--diff-foreground);
+  --color-code: var(--code);
+  --font-sans: var(--font-manrope);
+  --font-mono: var(--font-roboto-mono);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
 }
 
-.btn {
-  @apply px-4 py-2 rounded-lg bg-orange-600 hover:bg-orange-500 text-white font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed;
+@layer base {
+  * { @apply border-border outline-ring/50; }
+  body { @apply bg-background text-foreground font-sans antialiased; }
 }
 
-.btn-secondary {
-  @apply px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-100 font-medium transition-colors;
+/* ---------------------------------------------------------------------
+   Legacy utility classes — still used by the plain HTML form pages
+   (login, template editor) that predate the shadcn/ui component set.
+   ------------------------------------------------------------------ */
+
+@layer components {
+  .card {
+    @apply bg-card border border-border rounded-xl p-5;
+  }
+
+  .btn {
+    @apply px-4 py-2 rounded-lg bg-accent/15 border border-accent/40 text-accent font-medium transition-colors hover:bg-accent/25 disabled:opacity-40 disabled:cursor-not-allowed;
+  }
+
+  .btn-secondary {
+    @apply px-4 py-2 rounded-lg border border-border bg-transparent text-secondary-foreground font-medium transition-colors hover:bg-secondary;
+  }
+
+  .input {
+    @apply w-full bg-code border border-input rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring;
+  }
+
+  .label {
+    @apply text-xs uppercase tracking-wide text-muted-foreground mb-1 block;
+  }
 }
 
-.input {
-  @apply w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-600;
-}
-
-.label {
-  @apply text-xs uppercase tracking-wide text-slate-400 mb-1 block;
-}
-
-/* Scrollbar thémée pour les zones de défilement de TFGen (remplace la
-   barre grise par défaut du système, qui jure avec le fond graphite). */
+/* Scrollbar thémée (remplace la barre grise par défaut du système). */
 .tfgen-scroll {
   scrollbar-width: thin;
-  scrollbar-color: #38342E transparent;
+  scrollbar-color: var(--border) transparent;
 }
 
 .tfgen-scroll::-webkit-scrollbar {
@@ -43,7 +140,7 @@ body {
 }
 
 .tfgen-scroll::-webkit-scrollbar-thumb {
-  background-color: #38342E;
+  background-color: var(--border);
   border-radius: 999px;
   border: 2px solid transparent;
   background-clip: padding-box;

@@ -1,8 +1,8 @@
 "use client";
 
 import { useMemo } from "react";
-import { Button, TemplateCard, type TemplateSummary } from "../components";
-import { color, font } from "../tokens";
+import { Button } from "@/components/ui/button";
+import { TemplateCard, type TemplateSummary } from "../template-card";
 import { ApiGeneration, ApiTemplate, CATEGORY_LABELS, formatRelative, toDesignCategory } from "./shared";
 
 export default function DashboardView({
@@ -43,24 +43,24 @@ export default function DashboardView({
   }));
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 30 }}>
-      <div style={{ display: "flex", alignItems: "flex-end", gap: 20, flexWrap: "wrap" }}>
-        <div style={{ flex: 1, minWidth: 260 }}>
-          <h1 style={{ fontSize: 30, margin: "0 0 6px", fontWeight: 600 }}>Tableau de bord</h1>
-          <p style={{ margin: 0, color: color.textMuted }}>
+    <div className="flex flex-col gap-7.5">
+      <div className="flex flex-wrap items-end gap-5">
+        <div className="min-w-65 flex-1">
+          <h1 className="mb-1.5 text-[30px] font-semibold">Tableau de bord</h1>
+          <p className="m-0 text-muted-foreground">
             {templates.length} template{templates.length > 1 ? "s" : ""} publié{templates.length > 1 ? "s" : ""}
             {generations[0] ? ` · dernière génération ${formatRelative(generations[0].createdAt)}` : ""}
           </p>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
+        <div className="flex gap-2">
           <Button onClick={onNewTemplate}>+ Nouveau template</Button>
-          <Button variant="primary" onClick={onNewGeneration}>
+          <Button variant="default" onClick={onNewGeneration}>
             Nouvelle génération
           </Button>
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
+      <div className="grid grid-cols-3 gap-3">
         {[
           ["Templates actifs", String(stats.templates)],
           ["Générations · 30 j", String(stats.generations30d)],
@@ -68,48 +68,31 @@ export default function DashboardView({
         ].map(([label, value]) => (
           <div
             key={label}
-            style={{
-              padding: "14px 16px",
-              borderRadius: 12,
-              background: color.surface,
-              boxShadow: `0 0 0 1px ${color.border}`,
-              display: "flex",
-              flexDirection: "column",
-              gap: 6,
-            }}
+            className="flex flex-col gap-1.5 rounded-xl border border-border bg-card px-4 py-3.5"
           >
-            <div
-              style={{
-                fontSize: 10,
-                letterSpacing: "0.12em",
-                textTransform: "uppercase",
-                color: color.textDim,
-              }}
-            >
-              {label}
-            </div>
-            <div style={{ fontFamily: font.mono, fontSize: 26, color: color.text }}>{value}</div>
+            <div className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">{label}</div>
+            <div className="font-mono text-[26px] text-foreground">{value}</div>
           </div>
         ))}
       </div>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-        <h2 style={{ fontSize: 19, margin: 0, fontWeight: 600 }}>Templates</h2>
+      <div className="flex flex-col gap-3.5">
+        <h2 className="m-0 text-[19px] font-semibold">Templates</h2>
         {loading ? (
-          <p style={{ color: color.textDim, fontSize: 13 }}>Chargement...</p>
+          <p className="text-[13px] text-muted-foreground">Chargement...</p>
         ) : templates.length === 0 ? (
-          <p style={{ color: color.textDim, fontSize: 13 }}>
+          <p className="text-[13px] text-muted-foreground">
             Aucun template pour le moment.{" "}
             <button
               type="button"
               onClick={onNewTemplate}
-              style={{ color: color.generateSoft, textDecoration: "underline", cursor: "pointer", background: "none", border: 0, font: "inherit" }}
+              className="cursor-pointer bg-transparent text-accent underline"
             >
               En créer un
             </button>
           </p>
         ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 12 }}>
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-3">
             {templates.map((t, i) => (
               <TemplateCard
                 key={t.id}
@@ -122,43 +105,25 @@ export default function DashboardView({
         )}
       </div>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-        <h2 style={{ fontSize: 19, margin: 0, fontWeight: 600 }}>Historique</h2>
-        <div
-          style={{
-            borderRadius: 12,
-            background: color.surface,
-            boxShadow: `0 0 0 1px ${color.border}`,
-            overflow: "hidden",
-          }}
-        >
+      <div className="flex flex-col gap-3">
+        <h2 className="m-0 text-[19px] font-semibold">Historique</h2>
+        <div className="overflow-hidden rounded-xl border border-border bg-card">
           {generations.length === 0 ? (
-            <div style={{ padding: 16, fontSize: 12.5, color: color.textDim }}>
+            <div className="p-4 text-[12.5px] text-muted-foreground">
               Aucune génération pour le moment.
             </div>
           ) : (
             generations.slice(0, 8).map((g) => (
               <div
                 key={g.id}
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "1.6fr 1.2fr 0.9fr auto",
-                  gap: 12,
-                  alignItems: "center",
-                  padding: "11px 16px",
-                  borderBottom: `1px solid ${color.border}`,
-                }}
+                className="grid grid-cols-[1.6fr_1.2fr_0.9fr_auto] items-center gap-3 border-b border-border px-4 py-2.5 last:border-b-0"
               >
-                <div style={{ fontFamily: font.mono, fontSize: 12.5, color: color.textSecondary }}>
-                  {g.fileName}
-                </div>
-                <div style={{ fontFamily: font.mono, fontSize: 12, color: color.generateSoft }}>
-                  {g.template.name}
-                </div>
-                <div style={{ fontSize: 12, color: color.textDim }}>{formatRelative(g.createdAt)}</div>
+                <div className="font-mono text-[12.5px] text-secondary-foreground">{g.fileName}</div>
+                <div className="font-mono text-xs text-accent">{g.template.name}</div>
+                <div className="text-xs text-muted-foreground">{formatRelative(g.createdAt)}</div>
                 <a
                   href={`/api/generate/${g.id}/download`}
-                  style={{ fontSize: 11.5, color: color.textMuted, textDecoration: "underline" }}
+                  className="text-[11.5px] text-muted-foreground underline"
                 >
                   Télécharger
                 </a>

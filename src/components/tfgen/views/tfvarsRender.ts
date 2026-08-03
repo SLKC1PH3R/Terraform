@@ -1,4 +1,5 @@
-import type { TfvarsLine, VariableRowData, VariableSectionData } from "../components";
+import type { TfvarsLine } from "../tfvars-preview";
+import type { VariableRowData, VariableSectionData } from "../variable-section";
 import { toDesignCategory } from "./shared";
 
 export interface Row {

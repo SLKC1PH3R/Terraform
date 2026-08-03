@@ -1,4 +1,4 @@
-import type { ResourceCategory } from "../tokens";
+import type { ResourceCategory } from "../categories";
 
 export const CATEGORY_LABELS: Record<string, string> = {
   RG: "Resource Group",

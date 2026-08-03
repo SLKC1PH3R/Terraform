@@ -2,8 +2,8 @@
 
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Button } from "./components";
-import { activeNavGradient, color, font } from "./tokens";
+import { Button } from "@/components/ui/button";
+import { NavItem } from "./nav-item";
 import DashboardView from "./views/DashboardView";
 import GenerateView from "./views/GenerateView";
 import EditorView from "./views/EditorView";
@@ -40,6 +40,14 @@ const NAV: { view: View; label: string; icon: string }[] = [
     icon: "M128,24A104,104,0,1,0,232,128,104.12,104.12,0,0,0,128,24Zm0,192a88,88,0,1,1,88-88A88.1,88.1,0,0,1,128,216Zm64-88a8,8,0,0,1-8,8H128a8,8,0,0,1-8-8V72a8,8,0,0,1,16,0v48h48A8,8,0,0,1,192,128Z",
   },
 ];
+
+function NavIcon({ path }: { path: string }) {
+  return (
+    <svg viewBox="0 0 256 256" fill="currentColor">
+      <path d={path} />
+    </svg>
+  );
+}
 
 export default function AppShell() {
   const router = useRouter();
@@ -80,144 +88,51 @@ export default function AppShell() {
   }
 
   return (
-    <div
-      style={{
-        display: "flex",
-        minHeight: "100vh",
-        background: color.bg,
-        color: color.text,
-        fontFamily: font.ui,
-        fontSize: 14,
-      }}
-    >
-      <aside
-        style={{
-          width: 256,
-          flex: "0 0 256px",
-          background: "transparent",
-          padding: "18px 14px",
-          display: "flex",
-          flexDirection: "column",
-          gap: 26,
-          position: "sticky",
-          top: 0,
-          alignSelf: "flex-start",
-          height: "100vh",
-          boxSizing: "border-box",
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "0 6px" }}>
-          <div
-            style={{
-              width: 32,
-              height: 32,
-              borderRadius: 8,
-              border: `1px solid ${color.borderStrong}`,
-              display: "grid",
-              placeItems: "center",
-              fontFamily: font.mono,
-              fontSize: 13,
-              fontWeight: 600,
-              color: color.generate,
-            }}
-          >
+    <div className="flex min-h-screen bg-background text-[14px] text-foreground">
+      <aside className="sticky top-0 flex h-screen w-64 shrink-0 flex-col gap-6 self-start bg-transparent p-3.5">
+        <div className="flex items-center gap-2.5 px-1.5">
+          <div className="grid size-8 place-items-center rounded-lg border border-border font-mono text-[13px] font-semibold text-accent">
             tf
           </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-            <div style={{ fontSize: 16, fontWeight: 500 }}>TFGen</div>
-            <div style={{ fontFamily: font.mono, fontSize: 9.5, color: color.textDim }}>
+          <div className="flex flex-col gap-0.5">
+            <div className="text-base font-medium">TFGen</div>
+            <div className="font-mono text-[9.5px] text-muted-foreground">
               terraform.digitalstack.cloud
             </div>
           </div>
         </div>
 
-        <nav style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-          <div
-            style={{
-              fontSize: 9.5,
-              letterSpacing: "0.14em",
-              textTransform: "uppercase",
-              color: color.textFaint,
-              padding: "0 8px 6px",
-            }}
-          >
+        <nav className="flex flex-col gap-1">
+          <div className="px-2 pb-1.5 text-[9.5px] uppercase tracking-[0.14em] text-muted-foreground/80">
             Pilotage
           </div>
-          {NAV.map((item) => {
-            const active = view === item.view;
-            return (
-              <button
-                key={item.view}
-                type="button"
-                onClick={() => setView(item.view)}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 9,
-                  textAlign: "left",
-                  font: "inherit",
-                  cursor: "pointer",
-                  padding: "8px 10px",
-                  borderRadius: 8,
-                  border: "1px solid transparent",
-                  background: active ? activeNavGradient : "transparent",
-                  color: active ? color.text : color.textMuted,
-                }}
-              >
-                <svg viewBox="0 0 256 256" width={16} height={16} fill="currentColor" style={{ flex: "0 0 16px" }}>
-                  <path d={item.icon} />
-                </svg>
-                {item.label}
-              </button>
-            );
-          })}
+          {NAV.map((item) => (
+            <NavItem
+              key={item.view}
+              active={view === item.view}
+              icon={<NavIcon path={item.icon} />}
+              onClick={() => setView(item.view)}
+            >
+              {item.label}
+            </NavItem>
+          ))}
         </nav>
 
-        <div
-          style={{
-            marginTop: "auto",
-            display: "flex",
-            alignItems: "center",
-            padding: "10px 8px",
-            borderTop: `1px solid ${color.border}`,
-          }}
-        >
-          <Button size="sm" variant="secondary" onClick={handleLogout} style={{ width: "100%", justifyContent: "center" }}>
+        <div className="mt-auto flex items-center border-t border-border pt-2.5">
+          <Button size="sm" variant="secondary" onClick={handleLogout} className="w-full justify-center">
             Se déconnecter
           </Button>
         </div>
       </aside>
 
-      <main
-        style={{
-          flex: 1,
-          minWidth: 0,
-          display: "flex",
-          flexDirection: "column",
-          margin: "10px 10px 10px 0",
-          border: `1px solid ${color.border}`,
-          borderRadius: 16,
-          background: "#121110",
-          overflow: "hidden",
-        }}
-      >
-        <header
-          style={{
-            height: 50,
-            flex: "0 0 50px",
-            borderBottom: `1px solid ${color.border}`,
-            display: "flex",
-            alignItems: "center",
-            gap: 14,
-            padding: "0 26px",
-          }}
-        >
-          <div style={{ fontFamily: font.mono, fontSize: 11.5, color: color.textDim }}>
-            tfgen / <span style={{ color: color.textSecondary }}>{view}</span>
+      <main className="m-2.5 ml-0 flex flex-1 flex-col overflow-hidden rounded-2xl border border-border bg-[#121110]">
+        <header className="flex h-[50px] shrink-0 items-center gap-3.5 border-b border-border px-6.5">
+          <div className="font-mono text-[11.5px] text-muted-foreground">
+            tfgen / <span className="text-secondary-foreground">{view}</span>
           </div>
         </header>
 
-        <div style={{ flex: 1, padding: "26px 26px 64px", maxWidth: 1240 }}>
+        <div className="max-w-[1240px] flex-1 p-6.5 pb-16">
           {view === "dashboard" && (
             <DashboardView
               templates={templates}

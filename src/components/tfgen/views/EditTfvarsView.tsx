@@ -1,8 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Button, CategoryBadge, StatusPill, TfvarsPreview, VariableSection } from "../components";
-import { color, font } from "../tokens";
+import { Button } from "@/components/ui/button";
+import { CategoryBadge } from "../categories";
+import { StatusPill } from "../status-pill";
+import { TfvarsPreview } from "../tfvars-preview";
+import { VariableSection } from "../variable-section";
 import { ApiGeneration, ApiTemplateVariable, formatRelative, toDesignCategory } from "./shared";
 import { buildSections, contentToLines, deriveFileName, rowState, type BuildResult, type Row } from "./tfvarsRender";
 
@@ -127,37 +130,22 @@ export default function EditTfvarsView({
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+    <div className="flex flex-col gap-5">
       <div>
-        <h1 style={{ fontSize: 28, margin: "0 0 6px", fontWeight: 600 }}>Éditeur tfvars</h1>
-        <p style={{ margin: 0, color: color.textMuted, fontSize: 13 }}>
+        <h1 className="mb-1.5 text-[28px] font-semibold">Éditeur tfvars</h1>
+        <p className="m-0 text-[13px] text-muted-foreground">
           Modifier les valeurs d'un .tfvars déjà généré, sans repasser par l'import de la fiche FIS.
         </p>
       </div>
 
-      <div
-        style={{
-          borderRadius: 12,
-          background: color.surface,
-          boxShadow: `0 0 0 1px ${color.border}`,
-          padding: 14,
-        }}
-      >
-        <label className="label" style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: color.textDim, display: "block", marginBottom: 6 }}>
+      <div className="rounded-xl border border-border bg-card p-3.5">
+        <label className="mb-1.5 block text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
           Choisir un .tfvars déjà généré
         </label>
         <select
           value={selectedId}
           onChange={(e) => setSelectedId(e.target.value)}
-          style={{
-            width: "100%",
-            background: color.code,
-            border: `1px solid ${color.borderStrong}`,
-            borderRadius: 8,
-            padding: "8px 10px",
-            fontSize: 13,
-            color: color.text,
-          }}
+          className="w-full rounded-lg border border-border bg-code px-2.5 py-2 text-[13px] text-foreground"
         >
           <option value="">— Sélectionner —</option>
           {generations.map((g) => (
@@ -168,20 +156,18 @@ export default function EditTfvarsView({
         </select>
       </div>
 
-      {error && <p style={{ color: "#F87171", fontSize: 13 }}>{error}</p>}
-      {loadingDetail && <p style={{ color: color.textDim, fontSize: 13 }}>Chargement...</p>}
+      {error && <p className="text-[13px] text-destructive">{error}</p>}
+      {loadingDetail && <p className="text-[13px] text-muted-foreground">Chargement...</p>}
 
       {detail && !loadingDetail && (
         <>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-            <CategoryBadge category={toDesignCategory(detail.template.category)} size="sm" />
-            <span style={{ fontFamily: font.mono, fontSize: 12.5, color: color.generateSoft }}>
-              {detail.template.name}
-            </span>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <CategoryBadge category={toDesignCategory(detail.template.category)} />
+            <span className="font-mono text-[12.5px] text-accent">{detail.template.name}</span>
             <StatusPill tone="ok">{modifiedCount} modifiées vs. défaut du template</StatusPill>
           </div>
 
-          <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
+          <div className="flex flex-col gap-2.5">
             {sections.map((s) => (
               <VariableSection
                 key={s.id}
@@ -193,7 +179,7 @@ export default function EditTfvarsView({
             ))}
           </div>
 
-          <div style={{ display: "flex", justifyContent: "flex-end" }}>
+          <div className="flex justify-end">
             <Button variant="generate" onClick={handleRegenerate} disabled={saving}>
               {saving ? "Régénération..." : "Régénérer le .tfvars"}
             </Button>
@@ -201,11 +187,11 @@ export default function EditTfvarsView({
 
           {result && (
             <>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <div className="flex items-center gap-2.5">
                 <StatusPill tone="ok">Régénéré</StatusPill>
-                <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+                <div className="ml-auto flex gap-2">
                   <Button
-                    variant="primary"
+                    variant="default"
                     onClick={() => window.open(`/api/generate/${detail.id}/download`, "_blank")}
                   >
                     Télécharger le .tfvars
