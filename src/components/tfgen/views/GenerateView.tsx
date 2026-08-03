@@ -12,7 +12,7 @@ import { ReviewWorkbench } from "../review-workbench";
 import { cn } from "@/lib/utils";
 import { buildTfvars, deriveRgExtractedFields, deriveVmExtractedFields } from "@/lib/tfvars-generator";
 import { isStorageAccountTemplate } from "@/lib/storage-account-generator";
-import { ApiTemplate, ApiTemplateVariable, CATEGORY_LABELS, toDesignCategory } from "./shared";
+import { ApiTemplate, ApiTemplateVariable, CATEGORY_LABELS, isVmCategory, toDesignCategory } from "./shared";
 import { buildSections, contentToLines, deriveFileName, rowState, type BuildResult, type Row } from "./tfvarsRender";
 
 function fileToBase64(file: File): Promise<string> {
@@ -94,6 +94,22 @@ function templateHasVmToken(variables: ApiTemplateVariable[]): boolean {
   return variables.some((v) => VM_TOKEN_RE.test(v.name) || (!!v.group && VM_TOKEN_RE.test(v.group)));
 }
 
+/** Pour les templates VM uniquement : `service_fullname` doit reprendre le
+ * champ FIS "Service_Name" (nom applicatif, ex. "Azure Proxy") plutôt que le
+ * slug déduit du nom du Resource Group (ex. "olfeo") — cette dernière
+ * convention reste utilisée telle quelle pour le template RG lui-même (et le
+ * panneau RG secondaire), dont le nom de ressource est justement construit à
+ * partir de ce slug. */
+function applyVmServiceFullname(rows: Row[], extracted: { key: string; value: string }[]): Row[] {
+  const serviceName = extracted.find((e) => e.key === "service_name")?.value;
+  if (!serviceName) return rows;
+  return rows.map((r) =>
+    !r.group && r.name.toLowerCase() === "service_fullname"
+      ? { ...r, finalValue: serviceName, matched: true }
+      : r
+  );
+}
+
 /** Fait correspondre les valeurs extraites d'une fiche aux variables du
  * template pour fusionner plusieurs ressources du même type dans un seul
  * .tfvars. Le 1er fichier (index 1) garde les noms tels quels. Pour les
@@ -111,7 +127,12 @@ function matchRowsForMerge(
 
   for (const v of variables) {
     const found = extractedMap.get(v.name.toLowerCase());
-    const finalValue = found !== undefined ? found : v.defaultValue || "";
+    // "vm1_index" ne provient jamais de la fiche FIS (ce n'est pas un champ
+    // serveur) : sans ce cas particulier, la valeur par défaut du template
+    // ("1") serait recopiée telle quelle pour vm2_index, vm3_index, ...
+    // Ici on la fait correspondre au rang de la VM dans la fusion.
+    const isIndexVar = v.name.toLowerCase() === "vm1_index";
+    const finalValue = found !== undefined ? found : isIndexVar ? String(index) : v.defaultValue || "";
 
     if (index === 1) {
       rows.push({
@@ -277,7 +298,9 @@ export default function GenerateView({
     const uf = uploadedFiles[0];
     setFileName(uf.fileName);
     setSourceFile(uf.file);
-    setRows(matchRows(selectedTemplate.variables, uf.extracted));
+    let newRows = matchRows(selectedTemplate.variables, uf.extracted);
+    if (isVmCategory(selectedTemplate.category)) newRows = applyVmServiceFullname(newRows, uf.extracted);
+    setRows(newRows);
     setStep(3);
     setupRgInfo(uf);
   }
@@ -288,7 +311,7 @@ export default function GenerateView({
     // jeton vm1 -> vm2/vm3/... plutôt que de préfixer par-dessus. Repli sur
     // un préfixe générique si le template ne suit pas cette convention.
     const useTokenRenumber = templateHasVmToken(selectedTemplate.variables);
-    const combined: Row[] = [];
+    let combined: Row[] = [];
     uploadedFiles.forEach((uf, i) => {
       if (useTokenRenumber) {
         combined.push(...matchRowsForMerge(selectedTemplate.variables, uf.extracted, i + 1));
@@ -297,6 +320,9 @@ export default function GenerateView({
         combined.push(...matchRows(selectedTemplate.variables, uf.extracted, prefix));
       }
     });
+    if (isVmCategory(selectedTemplate.category)) {
+      combined = applyVmServiceFullname(combined, uploadedFiles[0].extracted);
+    }
     setRows(combined);
     setFileName(uploadedFiles.map((f) => f.fileName).join(" + "));
     setSourceFile(uploadedFiles[0].file);
@@ -312,7 +338,8 @@ export default function GenerateView({
     const results: BatchResultEntry[] = [];
 
     for (const uf of uploadedFiles) {
-      const rowsForFile = matchRows(selectedTemplate.variables, uf.extracted);
+      let rowsForFile = matchRows(selectedTemplate.variables, uf.extracted);
+      if (isVmCategory(selectedTemplate.category)) rowsForFile = applyVmServiceFullname(rowsForFile, uf.extracted);
       const sourceFileBase64 = await fileToBase64(uf.file);
 
       const res = await fetch("/api/generate/build", {

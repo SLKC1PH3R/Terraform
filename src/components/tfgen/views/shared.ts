@@ -37,6 +37,10 @@ export function toDesignCategory(dbCategory: string): ResourceCategory {
   return CATEGORY_TO_DESIGN[dbCategory] ?? dbCategory;
 }
 
+export function isVmCategory(dbCategory: string): boolean {
+  return dbCategory === "VM_WINDOWS_MARKETPLACE" || dbCategory === "VM_WINDOWS_CUSTOM" || dbCategory === "VM_LINUX";
+}
+
 export interface ApiTemplateVariable {
   id: string;
   name: string;

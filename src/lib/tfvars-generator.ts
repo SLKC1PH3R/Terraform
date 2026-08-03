@@ -350,6 +350,10 @@ const SERVER_TYPE_TO_VM_TYPE: Record<string, string> = {
  *   RG par deriveRgExtractedFields, ex. "ppd" -> "u")
  * - vm_type ("infrastructure" ou "application"), déduit du champ FIS
  *   "Type de serveur : Infra /Appli"
+ * - "Gabarits VM" -> vm1_size, "Availability Zone" -> vm1_zone, dernier octet
+ *   de "IP 1" -> vm1_hostnum (repris tels quels par vm2_/vm3_/... lors d'une
+ *   fusion, chaque fiche source portant ses propres valeurs sous la clé
+ *   "vm1_*" avant renumérotation du jeton — cf. matchRowsForMerge)
  * Chaque alias n'est ajouté que si la valeur source est présente.
  */
 export function deriveVmExtractedFields(
@@ -367,10 +371,26 @@ export function deriveVmExtractedFields(
   alias("asg_1", "asg1_name");
   alias("subnet_1", "subnet1_name");
   alias("v_net", "vnet_name");
+  alias("gabarits_vm", "vm1_size");
+  alias("availability_zone", "vm1_zone");
 
   const env = map.get("env");
-  if (env && ENV_TO_VM_ENV[env]) {
-    result.push({ key: "vm_env", value: ENV_TO_VM_ENV[env] });
+  const vmEnvLetter = env ? ENV_TO_VM_ENV[env] : undefined;
+  if (vmEnvLetter) {
+    result.push({ key: "vm_env", value: vmEnvLetter });
+  }
+
+  // "Nom du serveur" suit la convention vm<lettre env><shortname><index> (ex.
+  // "vmpolfslv01" = vm + p (prod) + olfslv + 01) : on en extrait le
+  // "shortname" en retirant le préfixe vm<lettre env> et l'index numérique
+  // final. N'aboutit que si la lettre d'environnement du nom correspond bien
+  // à celle déduite du Resource Group, pour éviter une déduction hasardeuse.
+  const serverName = map.get("nom_du_serveur");
+  if (serverName && vmEnvLetter) {
+    const m = serverName.trim().toLowerCase().match(/^vm([a-z])(.+?)(\d+)$/);
+    if (m && m[1] === vmEnvLetter) {
+      result.push({ key: "vm_shortname", value: m[2] });
+    }
   }
 
   // Clé normalisée du champ FIS "Type de serveur : Infra /Appli" (l'espace
@@ -379,6 +399,16 @@ export function deriveVmExtractedFields(
   if (serverType) {
     const vmType = SERVER_TYPE_TO_VM_TYPE[serverType.trim().toLowerCase()];
     if (vmType) result.push({ key: "vm_type", value: vmType });
+  }
+
+  // Dernier octet de "IP 1" (ex. "172.18.5.11" -> "11"), utilisé pour
+  // l'indexation de l'IP statique dans le subnet.
+  const ip1 = map.get("ip_1");
+  if (ip1) {
+    const lastOctet = ip1.trim().split(".").pop();
+    if (lastOctet && /^\d+$/.test(lastOctet)) {
+      result.push({ key: "vm1_hostnum", value: lastOctet });
+    }
   }
 
   return result;
