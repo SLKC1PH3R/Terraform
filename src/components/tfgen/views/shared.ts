@@ -1,36 +1,37 @@
 import type { ResourceCategory } from "../categories";
 
+/** Catégories fixes de l'application — une seule catégorie "Virtual
+ * Machines" regroupe les templates VM Linux et Windows, les autres types de
+ * ressources ont chacun la leur. Liste figée : pas d'ajout/renommage/
+ * suppression depuis l'éditeur. */
 export const CATEGORY_LABELS: Record<string, string> = {
   RG: "Resource Group",
   STORAGE: "Storage Account",
   NSG_ASG: "NSG / ASG",
-  VM_WINDOWS_MARKETPLACE: "VM Windows (Marketplace)",
-  VM_WINDOWS_CUSTOM: "VM Windows (Custom)",
-  VM_LINUX: "VM Linux",
+  VM: "Virtual Machines",
   LOAD_BALANCER: "Load Balancer",
+  KEY_VAULT: "Key Vault",
 };
 
 export const CATEGORIES = [
   { value: "RG", label: "Resource Group" },
   { value: "STORAGE", label: "Storage Account" },
   { value: "NSG_ASG", label: "NSG / ASG" },
-  { value: "VM_WINDOWS_MARKETPLACE", label: "VM Windows (Marketplace)" },
-  { value: "VM_WINDOWS_CUSTOM", label: "VM Windows (Custom)" },
-  { value: "VM_LINUX", label: "VM Linux" },
+  { value: "VM", label: "Virtual Machines" },
   { value: "LOAD_BALANCER", label: "Load Balancer" },
+  { value: "KEY_VAULT", label: "Key Vault" },
 ];
 
 /** Convertit une catégorie DB vers la ResourceCategory du design system, pour
- * les catégories connues. Une catégorie inconnue (ajoutée à la volée depuis
- * l'éditeur) est affichée telle quelle, avec un style de badge neutre. */
+ * les catégories connues. Une catégorie inconnue (ex. donnée historique)
+ * est affichée telle quelle, avec un style de badge neutre. */
 export const CATEGORY_TO_DESIGN: Record<string, ResourceCategory> = {
   RG: "RG",
   STORAGE: "Storage",
   NSG_ASG: "NSG/ASG",
-  VM_WINDOWS_MARKETPLACE: "VM Windows",
-  VM_WINDOWS_CUSTOM: "VM Windows",
-  VM_LINUX: "VM Linux",
+  VM: "VM",
   LOAD_BALANCER: "ILB",
+  KEY_VAULT: "KV",
 };
 
 export function toDesignCategory(dbCategory: string): ResourceCategory {
@@ -38,7 +39,12 @@ export function toDesignCategory(dbCategory: string): ResourceCategory {
 }
 
 export function isVmCategory(dbCategory: string): boolean {
-  return dbCategory === "VM_WINDOWS_MARKETPLACE" || dbCategory === "VM_WINDOWS_CUSTOM" || dbCategory === "VM_LINUX";
+  return (
+    dbCategory === "VM" ||
+    dbCategory === "VM_WINDOWS_MARKETPLACE" ||
+    dbCategory === "VM_WINDOWS_CUSTOM" ||
+    dbCategory === "VM_LINUX"
+  );
 }
 
 export interface ApiTemplateVariable {

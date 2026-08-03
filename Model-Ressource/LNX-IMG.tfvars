@@ -80,7 +80,6 @@ tags_service = {
 # Specify the name of the image source used to create the VM
 vm1_image_name = "solidserver-amd64-cloud-azure-8.3.2"
 
-
 # Start the indexing of the VM at the value below (used for the VM name)
 vm1_index = "1"
 

@@ -175,7 +175,6 @@ export default function AppShell() {
                 refetchAll();
                 setView("dashboard");
               }}
-              onCategoryRenamed={refetchAll}
             />
           )}
 

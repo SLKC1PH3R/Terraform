@@ -11,12 +11,10 @@ export default function EditorView({
   templates,
   initialTemplateId,
   onSaved,
-  onCategoryRenamed,
 }: {
   templates: ApiTemplate[];
   initialTemplateId?: string;
   onSaved?: () => void;
-  onCategoryRenamed?: () => void;
 }) {
   const [selectedId, setSelectedId] = useState<string | undefined>(initialTemplateId);
 
@@ -81,7 +79,6 @@ export default function EditorView({
         }))}
         onSaved={onSaved}
         onDeleted={onSaved}
-        onCategoryRenamed={onCategoryRenamed}
       />
     </div>
   );
