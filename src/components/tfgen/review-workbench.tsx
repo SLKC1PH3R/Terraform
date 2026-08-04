@@ -8,16 +8,12 @@ import type { VariableSectionData, VariableState } from "./variable-section";
 import type { TfvarsLine } from "./tfvars-preview";
 
 /**
- * Step 3 — the review workbench.
- * Left: the full comparison, grouped by section with sticky headers.
- * Right: the generated .tfvars, live. Tabs collapse either pane.
- * A third tab ("fiche source") replaces both panes with a read-only,
- * spreadsheet-style table of the raw fields extracted from the imported
- * FIS file(s) — the exact label/value pairs as they appear in the sheet,
- * before any matching or derivation.
+ * Step 3 — the review workbench, three panes side by side: fiche source
+ * (raw label/value pairs from the imported FIS file, read-only) — revue.diff
+ * (the full comparison, grouped by section with sticky headers) — sortie
+ * .tfvars (generated, live). Each tab toggles its own pane's visibility
+ * independently, they are not mutually exclusive.
  */
-type Pane = "split" | "diff" | "code" | "fields";
-
 export interface SourceFieldGroup {
   fileName: string;
   entries: { key: string; value: string }[];
@@ -73,7 +69,11 @@ export function ReviewWorkbench({
   status?: { fmt: string; validate: string; destination: string; branch: string };
   className?: string;
 }) {
-  const [pane, setPane] = React.useState<Pane>("split");
+  const hasSourceFields = !!sourceFields && sourceFields.some((g) => g.entries.length > 0);
+
+  const [showFields, setShowFields] = React.useState(true);
+  const [showDiff, setShowDiff] = React.useState(true);
+  const [showCode, setShowCode] = React.useState(true);
 
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -91,9 +91,13 @@ export function ReviewWorkbench({
     ? sections.map((s) => ({ ...s, rows: s.rows.filter((r) => r.state !== "default") }))
     : sections;
 
-  const cols = pane === "diff" ? "1fr 0fr" : pane === "code" ? "0fr 1fr" : "1.15fr 1fr";
-  const toggle = (next: Pane) => setPane((p) => (p === next ? "split" : next));
-  const hasSourceFields = !!sourceFields && sourceFields.some((g) => g.entries.length > 0);
+  const cols = [
+    hasSourceFields ? (showFields ? "0.85fr" : "0fr") : null,
+    showDiff ? "1.15fr" : "0fr",
+    showCode ? "1fr" : "0fr",
+  ]
+    .filter((c): c is string => c !== null)
+    .join(" ");
 
   const totalVars = sections.reduce((n, s) => n + s.rows.length, 0);
   const totalModified = sections.reduce(
@@ -110,40 +114,41 @@ export function ReviewWorkbench({
     >
       {/* tabs */}
       <div className="flex h-10 shrink-0 items-stretch border-b border-border">
+        {hasSourceFields && (
+          <button
+            type="button"
+            onClick={() => setShowFields((v) => !v)}
+            className={cn(
+              "flex items-center gap-2 border-r border-border px-4 font-mono text-[11.5px]",
+              showFields ? "bg-card text-foreground" : "text-muted-foreground",
+            )}
+          >
+            <span className={cn("size-1.5 rounded-full", showFields ? "bg-accent" : "bg-[#45403A]")} />
+            fiche source
+          </button>
+        )}
         <button
           type="button"
-          onClick={() => toggle("diff")}
+          onClick={() => setShowDiff((v) => !v)}
           className={cn(
             "flex items-center gap-2 border-r border-border px-4 font-mono text-[11.5px]",
-            pane === "code" ? "text-muted-foreground" : "bg-card text-foreground",
+            showDiff ? "bg-card text-foreground" : "text-muted-foreground",
           )}
         >
-          <span className={cn("size-1.5 rounded-full", pane === "code" ? "bg-[#45403A]" : "bg-accent")} />
+          <span className={cn("size-1.5 rounded-full", showDiff ? "bg-accent" : "bg-[#45403A]")} />
           revue.diff
         </button>
         <button
           type="button"
-          onClick={() => toggle("code")}
+          onClick={() => setShowCode((v) => !v)}
           className={cn(
-            "flex items-center border-r border-border px-4 font-mono text-[11.5px]",
-            pane === "code" ? "bg-card text-foreground" : "text-muted-foreground",
+            "flex items-center gap-2 border-r border-border px-4 font-mono text-[11.5px]",
+            showCode ? "bg-card text-foreground" : "text-muted-foreground",
           )}
         >
+          <span className={cn("size-1.5 rounded-full", showCode ? "bg-accent" : "bg-[#45403A]")} />
           terraform.tfvars
         </button>
-        {hasSourceFields && (
-          <button
-            type="button"
-            onClick={() => setPane((p) => (p === "fields" ? "split" : "fields"))}
-            className={cn(
-              "flex items-center gap-2 border-r border-border px-4 font-mono text-[11.5px]",
-              pane === "fields" ? "bg-card text-foreground" : "text-muted-foreground",
-            )}
-          >
-            <span className={cn("size-1.5 rounded-full", pane === "fields" ? "bg-accent" : "bg-[#45403A]")} />
-            fiche source
-          </button>
-        )}
         <div className="ml-auto flex items-center gap-2 px-3">
           <button
             type="button"
@@ -163,37 +168,47 @@ export function ReviewWorkbench({
       </div>
 
       {/* panes */}
-      {pane === "fields" ? (
-        <div className="tfgen-scroll min-h-0 flex-1 overflow-y-auto p-3.5">
-          {sourceFields!
-            .filter((g) => g.entries.length > 0)
-            .map((group, gi) => (
-              <div key={gi} className="mb-4 flex flex-col gap-2 last:mb-0">
-                {sourceFields!.length > 1 && (
-                  <div className="font-mono text-xs text-accent">{group.fileName}</div>
-                )}
-                <div className="overflow-hidden rounded-lg border border-border">
-                  {group.entries.map((e, i) => (
-                    <div
-                      key={i}
-                      className={cn(
-                        "grid grid-cols-[1fr_1.4fr] border-b border-border last:border-b-0",
-                        i % 2 === 0 ? "bg-card" : "bg-transparent",
-                      )}
-                    >
-                      <div className="border-r border-border px-3 py-1.5 text-[12.5px] font-medium text-secondary-foreground">
-                        {e.key}
-                      </div>
-                      <div className="px-3 py-1.5 font-mono text-[12.5px] text-foreground">{e.value}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-        </div>
-      ) : (
       <div className="grid min-h-0 flex-1" style={{ gridTemplateColumns: cols }}>
-        <div className="flex min-w-0 flex-col overflow-hidden border-r border-border">
+        {hasSourceFields && (
+          <div className={cn("flex min-w-0 flex-col overflow-hidden border-r border-border", !showFields && "invisible")}>
+            <div className="flex shrink-0 items-center gap-2.5 border-b border-border px-3.5 py-2">
+              <span className="font-mono text-[9.5px] uppercase tracking-widest text-muted-foreground">
+                fiche source
+              </span>
+            </div>
+            <div className="tfgen-scroll min-h-0 flex-1 overflow-y-auto p-3">
+              {sourceFields!
+                .filter((g) => g.entries.length > 0)
+                .map((group, gi) => (
+                  <div key={gi} className="mb-4 flex flex-col gap-2 last:mb-0">
+                    {sourceFields!.length > 1 && (
+                      <div className="font-mono text-xs text-accent">{group.fileName}</div>
+                    )}
+                    <div className="overflow-hidden rounded-lg border border-border">
+                      {group.entries.map((e, i) => (
+                        <div
+                          key={i}
+                          className={cn(
+                            "grid grid-cols-[1fr_1.2fr] border-b border-border last:border-b-0",
+                            i % 2 === 0 ? "bg-card" : "bg-transparent",
+                          )}
+                        >
+                          <div className="truncate border-r border-border px-2.5 py-1.5 text-[11.5px] font-medium text-secondary-foreground">
+                            {e.key}
+                          </div>
+                          <div className="truncate px-2.5 py-1.5 font-mono text-[11.5px] text-foreground">
+                            {e.value}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+            </div>
+          </div>
+        )}
+
+        <div className={cn("flex min-w-0 flex-col overflow-hidden border-r border-border", !showDiff && "invisible")}>
           <div
             className={cn(
               GRID,
@@ -273,7 +288,7 @@ export function ReviewWorkbench({
           </div>
         </div>
 
-        <div className="flex min-w-0 flex-col overflow-hidden bg-code">
+        <div className={cn("flex min-w-0 flex-col overflow-hidden bg-code", !showCode && "invisible")}>
           <div className="flex shrink-0 items-center gap-2.5 border-b border-border px-3.5 py-2">
             <span className="font-mono text-[9.5px] uppercase tracking-widest text-muted-foreground">
               sortie · aperçu live
@@ -321,7 +336,6 @@ export function ReviewWorkbench({
           </div>
         </div>
       </div>
-      )}
 
       {/* status bar */}
       <div className="flex h-7 shrink-0 items-center gap-4 border-t border-border px-3.5 font-mono text-[10.5px] text-muted-foreground">
