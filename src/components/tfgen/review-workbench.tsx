@@ -11,8 +11,17 @@ import type { TfvarsLine } from "./tfvars-preview";
  * Step 3 — the review workbench.
  * Left: the full comparison, grouped by section with sticky headers.
  * Right: the generated .tfvars, live. Tabs collapse either pane.
+ * A third tab ("fiche source") replaces both panes with a read-only,
+ * spreadsheet-style table of the raw fields extracted from the imported
+ * FIS file(s) — the exact label/value pairs as they appear in the sheet,
+ * before any matching or derivation.
  */
-type Pane = "split" | "diff" | "code";
+type Pane = "split" | "diff" | "code" | "fields";
+
+export interface SourceFieldGroup {
+  fileName: string;
+  entries: { key: string; value: string }[];
+}
 
 const rowTone: Record<VariableState, { row: string; input: string; label: string; text: string }> = {
   modified: {
@@ -40,6 +49,7 @@ const GRID = "grid grid-cols-[1.4fr_1fr_1.2fr_74px] gap-3 px-3.5";
 export function ReviewWorkbench({
   sections,
   lines,
+  sourceFields,
   diffOnly = false,
   showLineNumbers = true,
   onDiffOnlyChange,
@@ -50,6 +60,9 @@ export function ReviewWorkbench({
 }: {
   sections: VariableSectionData[];
   lines: TfvarsLine[];
+  /** Champs bruts de la ou des fiches importées (avant matching), affichés
+   * dans l'onglet "fiche source". Onglet masqué si absent/vide. */
+  sourceFields?: SourceFieldGroup[];
   diffOnly?: boolean;
   showLineNumbers?: boolean;
   onDiffOnlyChange?: (value: boolean) => void;
@@ -80,6 +93,7 @@ export function ReviewWorkbench({
 
   const cols = pane === "diff" ? "1fr 0fr" : pane === "code" ? "0fr 1fr" : "1.15fr 1fr";
   const toggle = (next: Pane) => setPane((p) => (p === next ? "split" : next));
+  const hasSourceFields = !!sourceFields && sourceFields.some((g) => g.entries.length > 0);
 
   const totalVars = sections.reduce((n, s) => n + s.rows.length, 0);
   const totalModified = sections.reduce(
@@ -117,6 +131,19 @@ export function ReviewWorkbench({
         >
           terraform.tfvars
         </button>
+        {hasSourceFields && (
+          <button
+            type="button"
+            onClick={() => setPane((p) => (p === "fields" ? "split" : "fields"))}
+            className={cn(
+              "flex items-center gap-2 border-r border-border px-4 font-mono text-[11.5px]",
+              pane === "fields" ? "bg-card text-foreground" : "text-muted-foreground",
+            )}
+          >
+            <span className={cn("size-1.5 rounded-full", pane === "fields" ? "bg-accent" : "bg-[#45403A]")} />
+            fiche source
+          </button>
+        )}
         <div className="ml-auto flex items-center gap-2 px-3">
           <button
             type="button"
@@ -136,6 +163,35 @@ export function ReviewWorkbench({
       </div>
 
       {/* panes */}
+      {pane === "fields" ? (
+        <div className="tfgen-scroll min-h-0 flex-1 overflow-y-auto p-3.5">
+          {sourceFields!
+            .filter((g) => g.entries.length > 0)
+            .map((group, gi) => (
+              <div key={gi} className="mb-4 flex flex-col gap-2 last:mb-0">
+                {sourceFields!.length > 1 && (
+                  <div className="font-mono text-xs text-accent">{group.fileName}</div>
+                )}
+                <div className="overflow-hidden rounded-lg border border-border">
+                  {group.entries.map((e, i) => (
+                    <div
+                      key={i}
+                      className={cn(
+                        "grid grid-cols-[1fr_1.4fr] border-b border-border last:border-b-0",
+                        i % 2 === 0 ? "bg-card" : "bg-transparent",
+                      )}
+                    >
+                      <div className="border-r border-border px-3 py-1.5 text-[12.5px] font-medium text-secondary-foreground">
+                        {e.key}
+                      </div>
+                      <div className="px-3 py-1.5 font-mono text-[12.5px] text-foreground">{e.value}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+        </div>
+      ) : (
       <div className="grid min-h-0 flex-1" style={{ gridTemplateColumns: cols }}>
         <div className="flex min-w-0 flex-col overflow-hidden border-r border-border">
           <div
@@ -265,6 +321,7 @@ export function ReviewWorkbench({
           </div>
         </div>
       </div>
+      )}
 
       {/* status bar */}
       <div className="flex h-7 shrink-0 items-center gap-4 border-t border-border px-3.5 font-mono text-[10.5px] text-muted-foreground">

@@ -3,6 +3,10 @@ import * as XLSX from "xlsx";
 export interface ExtractedVariable {
   key: string;
   value: string;
+  /** Libellé original de la fiche (ex. "Nom du serveur"), pour affichage —
+   * absent pour les paires synthétiques ajoutées par déduction (alias vm_rg,
+   * env dérivé du RG, ...). */
+  label?: string;
 }
 
 function normalize(s: string) {
@@ -63,7 +67,7 @@ function extractRowPairs(headerRow: unknown[], dataRow: unknown[]): ExtractedVar
     const key = rawHeader.split(/\r?\n/)[0].trim();
     if (!key) continue;
 
-    extracted.push({ key: normalizeKey(key), value: rawValue });
+    extracted.push({ key: normalizeKey(key), value: rawValue, label: key });
   }
 
   return extracted;
@@ -130,7 +134,7 @@ function parseSyntheseSheet(workbook: XLSX.WorkBook): ExtractedVariable[] {
     if (!key || !value) continue;
     if (key.length > 80) continue; // probablement pas une clé de variable
 
-    extracted.push({ key: normalizeKey(key), value });
+    extracted.push({ key: normalizeKey(key), value, label: key });
   }
 
   return extracted;
@@ -166,7 +170,7 @@ function parseBootdiagSheet(workbook: XLSX.WorkBook): ExtractedVariable[] {
     if (!label || !value) continue;
 
     const targetKey = BOOTDIAG_LABEL_TO_KEY[normalizeKey(label)];
-    if (targetKey) extracted.push({ key: targetKey, value });
+    if (targetKey) extracted.push({ key: targetKey, value, label });
   }
 
   return extracted;

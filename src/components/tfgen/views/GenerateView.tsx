@@ -8,7 +8,7 @@ import { Stepper } from "../stepper";
 import { TfvarsPreview } from "../tfvars-preview";
 import { UploadZone } from "../upload-zone";
 import { VariableSection } from "../variable-section";
-import { ReviewWorkbench } from "../review-workbench";
+import { ReviewWorkbench, type SourceFieldGroup } from "../review-workbench";
 import { cn } from "@/lib/utils";
 import { buildTfvars, deriveRgExtractedFields, deriveVmExtractedFields } from "@/lib/tfvars-generator";
 import { isStorageAccountTemplate } from "@/lib/storage-account-generator";
@@ -37,7 +37,7 @@ interface RgInfo {
 interface UploadedFile {
   file: File;
   fileName: string;
-  extracted: { key: string; value: string }[];
+  extracted: { key: string; value: string; label?: string }[];
   rgDerived: { serviceFullname: string; env: string } | null;
 }
 
@@ -220,6 +220,19 @@ export default function GenerateView({
 
   const modifiedCount = rows.filter((r) => rowState(r) === "modified").length;
   const defaultCount = rows.length - modifiedCount;
+
+  // Champs bruts de la ou des fiches importées, avant matching/déduction —
+  // affichés dans l'onglet "fiche source" de l'atelier de revue.
+  const sourceFields: SourceFieldGroup[] = useMemo(
+    () =>
+      uploadedFiles.map((uf) => ({
+        fileName: uf.fileName,
+        entries: uf.extracted
+          .filter((e): e is { key: string; value: string; label: string } => !!e.label)
+          .map((e) => ({ key: e.label, value: e.value })),
+      })),
+    [uploadedFiles]
+  );
 
   function resetUploadState() {
     setUploadedFiles([]);
@@ -705,6 +718,7 @@ export default function GenerateView({
           <ReviewWorkbench
             sections={sections}
             lines={livePreview ? contentToLines(livePreview.content, livePreview.diff) : []}
+            sourceFields={sourceFields}
             diffOnly={diffOnly}
             onDiffOnlyChange={setDiffOnly}
             onGenerate={handleGenerate}
