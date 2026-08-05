@@ -29,7 +29,6 @@ export async function POST(req: NextRequest) {
           type: v.type || "string",
           defaultValue: v.defaultValue ?? "",
           description: v.description || null,
-          required: !!v.required,
           order: i,
           group: v.group || null,
         })),

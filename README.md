@@ -9,7 +9,7 @@ FIS Excel (onglet « synthèse » lu en clé/valeur).
 1. **Gestion des templates** (`/templates/new`, `/templates/:id`) : chaque
    template définit une catégorie de ressource, un contenu `.tf` de référence
    (optionnel, informatif) et une liste de variables avec nom, type, valeur
-   par défaut, description, et si elle est requise.
+   par défaut et description.
 2. **Génération** (`/generate`) :
    - sélection du template
    - upload de la fiche FIS `.xlsx` → lecture de l'onglet « synthèse »

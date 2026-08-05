@@ -32,7 +32,6 @@ export default function EditorView({
           type: v.type,
           defaultValue: v.defaultValue || "",
           description: v.description || "",
-          required: v.required,
           group: v.group || "",
         })),
       }

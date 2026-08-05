@@ -28,7 +28,6 @@ model TemplateVariable {
   type         String   @default("string") // string | number | bool | list | map
   defaultValue String?  @db.Text
   description  String?
-  required     Boolean  @default(false)
   order        Int      @default(0)
   group        String? // si renseigné, recompose var = { <group> = { name = value, ... } } à la génération
 }

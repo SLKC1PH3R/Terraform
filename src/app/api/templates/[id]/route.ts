@@ -30,7 +30,6 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
           type: v.type || "string",
           defaultValue: v.defaultValue ?? "",
           description: v.description || null,
-          required: !!v.required,
           order: i,
           group: v.group || null,
         })),

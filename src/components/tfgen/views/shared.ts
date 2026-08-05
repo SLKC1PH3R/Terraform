@@ -53,7 +53,6 @@ export interface ApiTemplateVariable {
   type: string;
   defaultValue: string | null;
   description: string | null;
-  required: boolean;
   group: string | null;
   order: number;
 }
