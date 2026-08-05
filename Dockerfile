@@ -29,4 +29,4 @@ COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
 COPY --from=builder /app/node_modules/.bin ./node_modules/.bin
 
 EXPOSE 8020
-CMD ["sh", "-c", "npx prisma db execute --schema prisma/schema.prisma --file prisma/migrate-category-to-text.sql && npx prisma db push --skip-generate && node prisma/seed-templates.mjs && node server.js"]
+CMD ["sh", "-c", "npx prisma db execute --schema prisma/schema.prisma --file prisma/migrate-category-to-text.sql && npx prisma db push --skip-generate --accept-data-loss && node prisma/seed-templates.mjs && node server.js"]
