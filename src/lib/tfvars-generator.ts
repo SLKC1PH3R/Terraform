@@ -99,6 +99,34 @@ function formatValue(type: string, value: string): string {
   }
 }
 
+/** Retire un commentaire de fin de ligne (# ...), en ignorant les '#' à
+ * l'intérieur d'une chaîne entre guillemets. */
+function stripInlineComment(line: string): string {
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"' && line[i - 1] !== "\\") inQuotes = !inQuotes;
+    if (ch === "#" && !inQuotes) return line.slice(0, i);
+  }
+  return line;
+}
+
+/** Profondeur nette de crochets/accolades d'une ligne (hors chaînes entre
+ * guillemets), utilisée pour détecter une valeur `key = [ ... ]` ou
+ * `key = { ... }` qui s'étend sur plusieurs lignes. */
+function bracketDelta(s: string): number {
+  let depth = 0;
+  let inQuotes = false;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (ch === '"' && s[i - 1] !== "\\") inQuotes = !inQuotes;
+    if (inQuotes) continue;
+    if (ch === "[" || ch === "{") depth++;
+    if (ch === "]" || ch === "}") depth--;
+  }
+  return depth;
+}
+
 function computeDiff(variables: VariableForGeneration[]): DiffEntry[] {
   return variables.map((v) => ({
     name: v.name,
@@ -164,22 +192,6 @@ function buildTfvarsFromReference(tfContent: string, variables: VariableForGener
   let currentGroup: string | null = null;
 
   const assignPattern = /^(\s*)([a-zA-Z_][\w-]*)(\s*=\s*)(.*)$/;
-
-  /** Profondeur nette de crochets/accolades d'une ligne (hors chaînes entre
-   * guillemets), utilisée pour détecter une valeur `key = [ ... ]` (liste,
-   * objet unique, etc.) qui s'étend sur plusieurs lignes. */
-  const bracketDelta = (s: string): number => {
-    let depth = 0;
-    let inQuotes = false;
-    for (let i = 0; i < s.length; i++) {
-      const ch = s[i];
-      if (ch === '"' && s[i - 1] !== "\\") inQuotes = !inQuotes;
-      if (inQuotes) continue;
-      if (ch === "[" || ch === "{") depth++;
-      if (ch === "]" || ch === "}") depth--;
-    }
-    return depth;
-  };
 
   let i = 0;
   while (i < lines.length) {
@@ -257,22 +269,191 @@ function buildTfvarsFromReference(tfContent: string, variables: VariableForGener
   return content;
 }
 
+/** "vm1", "vm2", ... — jeton délimité (ni précédé ni suivi d'un caractère
+ * alphanumérique) utilisé par les templates VM (WIN-IMAGE, WIN-Market,
+ * LNX-IMG, LNX-Market) pour numéroter les variables/groupes d'une VM
+ * (vm1_index, tags_vm1, tags_vm1_datadisk1, ...). */
+const VM_INDEX_RE = /(?<![a-z0-9])vm(\d+)(?![a-z0-9])/i;
+
+function vmIndexOf(v: VariableForGeneration): number | null {
+  const m = (v.group || v.name).match(VM_INDEX_RE);
+  return m ? parseInt(m[1], 10) : null;
+}
+
+/**
+ * Regroupe les variables par index de VM (vm1, vm2, ...), les variables
+ * partagées/globales (sans jeton vmN) rejoignant le groupe de la 1ère VM
+ * puisque c'est sa section, active dans le template, qui les porte déjà.
+ * Retourne `null` si aucune variable ne porte de jeton vmN (template non
+ * concerné par la fusion multi-VM, ex. RG, Storage, Key Vault, ILB, ASG/NSG).
+ */
+function groupRowsByVmIndex(
+  variables: VariableForGeneration[]
+): Map<number, VariableForGeneration[]> | null {
+  let hasAnyVmIndex = false;
+  const groups = new Map<number, VariableForGeneration[]>();
+
+  for (const v of variables) {
+    const idx = vmIndexOf(v);
+    if (idx !== null) hasAnyVmIndex = true;
+    const bucket = idx ?? 1;
+    if (!groups.has(bucket)) groups.set(bucket, []);
+    groups.get(bucket)!.push(v);
+  }
+
+  return hasAnyVmIndex ? groups : null;
+}
+
+/** Repère, dans le texte d'un template, la ligne où débute le bloc
+ * d'exemple commenté d'une VM suivante (bandeau `# ####...` : un "#" isolé
+ * suivi d'espace(s) puis d'une longue série de "#" — signature d'un
+ * bandeau de section normalement actif qui a été entièrement commenté). */
+function findCommentedBannerIndex(lines: string[], fromIndex = 0): number {
+  for (let i = fromIndex; i < lines.length; i++) {
+    if (/^#\s+#{3,}\s*$/.test(lines[i].trim())) return i;
+  }
+  return -1;
+}
+
+/** Tronque un contenu généré juste avant le premier bandeau commenté
+ * (`# ####...`) — c'est-à-dire le bloc d'exemple commenté d'une VM
+ * suivante, laissé tel quel par `buildTfvarsFromReference` faute de
+ * correspondance. Sans effet si aucun bandeau de ce type n'est trouvé. */
+function truncateAtCommentedBanner(content: string): string {
+  const lines = content.split(/\r?\n/);
+  const idx = findCommentedBannerIndex(lines);
+  if (idx === -1) return content;
+  return lines.slice(0, idx).join("\n").trimEnd() + "\n";
+}
+
+/** Isole la section d'une VM donnée (index `n`) dans le texte du template :
+ * du bandeau de commentaires qui la précède (ex. "Define variables for the
+ * linux VM1") jusqu'à sa dernière ligne active, sans empiéter sur le bloc
+ * d'exemple commenté de la VM suivante. Les blocs multi-lignes (map/list)
+ * dont la clé porte le jeton vmN sont inclus en entier. Retourne `null` si
+ * aucune ligne active ne porte ce jeton. */
+function extractVmSection(tfContent: string, n: number): string | null {
+  const lines = tfContent.split(/\r?\n/);
+  const tokenRe = new RegExp(`(?<![a-z0-9])vm${n}(?![a-z0-9])`, "i");
+  const assignPattern = /^\s*([a-zA-Z_][\w-]*)\s*=/;
+
+  let startIdx = -1;
+  for (let i = 0; i < lines.length; i++) {
+    const m = lines[i].match(assignPattern);
+    if (m && tokenRe.test(m[1])) {
+      startIdx = i;
+      break;
+    }
+  }
+  if (startIdx === -1) return null;
+
+  let headerStart = startIdx;
+  while (headerStart > 0 && lines[headerStart - 1].trim() !== "") headerStart--;
+
+  // Le bandeau de section (ex. "###.../ # / # Define variables for the
+  // linux VM1 / # / ###...") est souvent séparé du commentaire du 1er champ
+  // par une ligne vide : on l'inclut s'il précède immédiatement ainsi.
+  if (headerStart > 1 && lines[headerStart - 1].trim() === "") {
+    let bannerEnd = headerStart - 1;
+    let bannerStart = bannerEnd;
+    while (bannerStart > 0 && lines[bannerStart - 1].trim() !== "") bannerStart--;
+    const looksLikeBanner = lines.slice(bannerStart, bannerEnd).some((l) => /^#{5,}\s*$/.test(l.trim()));
+    if (looksLikeBanner) headerStart = bannerStart;
+  }
+
+  let endIdx = startIdx;
+  let i = startIdx;
+  while (i < lines.length) {
+    const trimmed = lines[i].trim();
+    if (/^#\s+#{3,}\s*$/.test(trimmed)) break; // bandeau commenté = bloc d'exemple suivant
+
+    const m = lines[i].match(assignPattern);
+    if (m) {
+      let depth = bracketDelta(stripInlineComment(lines[i]).slice(lines[i].indexOf("=") + 1));
+      let j = i;
+      while (depth > 0 && j + 1 < lines.length) {
+        j++;
+        depth += bracketDelta(stripInlineComment(lines[j]));
+      }
+      if (tokenRe.test(m[1])) endIdx = j;
+      i = j + 1;
+      continue;
+    }
+    i++;
+  }
+
+  return lines.slice(headerStart, endIdx + 1).join("\n");
+}
+
+/** Renomme le jeton "vm<from>" en "vm<to>" dans un texte (délimité, ni
+ * précédé ni suivi d'un caractère alphanumérique), en conservant la casse
+ * du "vm" d'origine (ex. "VM1" -> "VM2", "vm1" -> "vm2"). */
+function renumberVmTokenText(text: string, from: number, to: number): string {
+  const re = new RegExp(`(?<![a-z0-9])(vm)${from}(?![a-z0-9])`, "gi");
+  return text.replace(re, (_match, prefix: string) => `${prefix}${to}`);
+}
+
+/**
+ * Génère un .tfvars fusionnant plusieurs VM (vm1, vm2, ...) dans un même
+ * fichier. La section vm1 est rendue normalement (elle est déjà active
+ * dans le template) ; pour chaque VM suivante, on clone la mise en forme
+ * de la section vm1 (en-tête, commentaires, structure des blocs) plutôt
+ * que d'essayer de "décommenter" le bloc d'exemple du template — dont le
+ * style de commentaire est parfois irrégulier d'un template à l'autre —
+ * puis on y substitue les valeurs de cette VM. Le bloc d'exemple commenté
+ * d'origine est retiré.
+ */
+function buildVmMergeTfvars(
+  tfContent: string,
+  vmGroups: Map<number, VariableForGeneration[]>
+): string {
+  const indices = Array.from(vmGroups.keys()).sort((a, b) => a - b);
+  const firstIndex = indices[0];
+
+  let content = truncateAtCommentedBanner(buildTfvarsFromReference(tfContent, vmGroups.get(firstIndex)!));
+  const templateSection = extractVmSection(tfContent, firstIndex);
+
+  for (const idx of indices) {
+    if (idx === firstIndex) continue;
+    const rowsForThisVm = vmGroups.get(idx)!;
+
+    if (templateSection) {
+      const renamedSnippet = renumberVmTokenText(templateSection, firstIndex, idx);
+      const block = buildTfvarsFromReference(renamedSnippet, rowsForThisVm);
+      content = `${content.trimEnd()}\n\n${block.trimEnd()}\n`;
+    } else {
+      content = `${content.trimEnd()}\n\n${buildFlatTfvars(rowsForThisVm)}`;
+    }
+  }
+
+  return content;
+}
+
 /**
  * Génère le contenu .tfvars à partir des variables. Si le template a un
  * `tfContent` de référence, il est utilisé comme gabarit (commentaires et
  * structure préservés, valeurs substituées) ; sinon un rendu "à plat" est
- * généré directement depuis les variables.
+ * généré directement depuis les variables. Si les variables couvrent
+ * plusieurs VM (vm1_*, vm2_*, ... — cas d'une fusion de plusieurs fiches
+ * dans un même fichier), chaque VM au-delà de la 1ère est mise en forme en
+ * clonant la section vm1 plutôt qu'en la laissant commentée.
  */
 export function buildTfvars(
   variables: VariableForGeneration[],
   tfContent?: string | null
 ): { content: string; diff: DiffEntry[] } {
   const diff = computeDiff(variables);
-  const content =
-    tfContent && tfContent.trim()
-      ? buildTfvarsFromReference(tfContent, variables)
-      : buildFlatTfvars(variables);
-  return { content, diff };
+
+  if (!tfContent || !tfContent.trim()) {
+    return { content: buildFlatTfvars(variables), diff };
+  }
+
+  const vmGroups = groupRowsByVmIndex(variables);
+  if (vmGroups && vmGroups.size > 1) {
+    return { content: buildVmMergeTfvars(tfContent, vmGroups), diff };
+  }
+
+  return { content: buildTfvarsFromReference(tfContent, variables), diff };
 }
 
 const RG_NAME_PATTERN = /^rg-(.+)-(prod|ppd|qual|sdbx|homl)-\d+$/i;

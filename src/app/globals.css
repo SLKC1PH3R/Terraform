@@ -99,7 +99,7 @@
 
 /* ---------------------------------------------------------------------
    Legacy utility classes — still used by the plain HTML form pages
-   (login, template editor) that predate the shadcn/ui component set.
+   (template editor) that predate the shadcn/ui component set.
    ------------------------------------------------------------------ */
 
 @layer components {
@@ -148,4 +148,81 @@
 
 .tfgen-scroll::-webkit-scrollbar-thumb:hover {
   background-color: #45403A;
+}
+
+/* ── TFGen · animations de la page de connexion (3a) ──────────────────
+   Le spinner utilise `animate-spin` de Tailwind, rien d'autre n'est requis.
+   ------------------------------------------------------------------- */
+
+@keyframes tfgen-aurora {
+  0%,
+  100% {
+    transform: translate3d(-6%, -4%, 0) scale(1.05) rotate(0deg);
+  }
+  50% {
+    transform: translate3d(6%, 5%, 0) scale(1.18) rotate(8deg);
+  }
+}
+
+@keyframes tfgen-aurora-2 {
+  0%,
+  100% {
+    transform: translate3d(5%, 6%, 0) scale(1.12);
+  }
+  50% {
+    transform: translate3d(-7%, -5%, 0) scale(1.02);
+  }
+}
+
+@keyframes tfgen-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes tfgen-shake {
+  10%,
+  90% {
+    transform: translateX(-1.5px);
+  }
+  30%,
+  70% {
+    transform: translateX(2.5px);
+  }
+  50% {
+    transform: translateX(-2.5px);
+  }
+}
+
+.tfgen-aurora {
+  animation: tfgen-aurora 22s ease-in-out infinite;
+}
+
+.tfgen-aurora-2 {
+  animation: tfgen-aurora-2 27s ease-in-out infinite;
+}
+
+.tfgen-rise {
+  animation: tfgen-rise 620ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.tfgen-shake {
+  animation: tfgen-shake 340ms cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+
+/* Respect des préférences système : on garde les entrées, on coupe les boucles. */
+@media (prefers-reduced-motion: reduce) {
+  .tfgen-aurora,
+  .tfgen-aurora-2 {
+    animation: none;
+  }
+  .tfgen-rise,
+  .tfgen-shake {
+    animation-duration: 1ms;
+  }
 }
