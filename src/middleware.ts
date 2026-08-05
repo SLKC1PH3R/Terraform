@@ -9,7 +9,8 @@ export async function middleware(req: NextRequest) {
   if (
     PUBLIC_PATHS.some((p) => pathname.startsWith(p)) ||
     pathname.startsWith("/_next") ||
-    pathname.startsWith("/favicon")
+    pathname.startsWith("/favicon") ||
+    /\.[a-zA-Z0-9]+$/.test(pathname) // fichiers statiques de public/ (logo, images, ...)
   ) {
     return NextResponse.next();
   }

@@ -1,7 +1,9 @@
 "use client";
 
 import * as React from "react";
+import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
+import { cn } from "@/lib/utils";
 import { NavItem } from "./nav-item";
 import { Icon, ICONS } from "./icons";
 import DashboardView from "./views/DashboardView";
@@ -11,6 +13,7 @@ import HistoryView from "./views/HistoryView";
 import EditTfvarsView from "./views/EditTfvarsView";
 import type { ResumeItem } from "./resume-queue";
 import { SearchDialog } from "./search-dialog";
+import { loadDraft } from "./views/generate-draft";
 import { ApiGeneration, ApiTemplate } from "./views/shared";
 
 type View = "dashboard" | "generate" | "editor" | "history" | "edit-tfvars";
@@ -84,22 +87,28 @@ export default function AppShell() {
     refetchAll();
   }
 
-  /** Générations non finalisées / bloquées. À remplacer par un vrai état de brouillon. */
-  const resumeItems: ResumeItem[] = React.useMemo(
-    () =>
-      generations
-        .filter((g) => !g.hasSourceFile)
-        .slice(0, 3)
-        .map((g) => ({
-          id: g.id,
-          fileName: g.fileName,
-          category: g.template.category,
-          detail: "Fiche source absente — réimporter pour rejouer la génération",
-          blocked: true,
-          action: "Corriger",
-        })),
-    [generations],
-  );
+  /** Brouillon réel de l'atelier de revue (étape 3), persisté en
+   * localStorage par GenerateView — cf. views/generate-draft.ts. Revérifié
+   * à chaque retour au tableau de bord (un brouillon peut avoir été
+   * résolu/abandonné entre-temps). */
+  const [draft, setDraft] = React.useState<ReturnType<typeof loadDraft>>(null);
+  React.useEffect(() => {
+    if (view === "dashboard") setDraft(loadDraft());
+  }, [view]);
+
+  const resumeItems: ResumeItem[] = React.useMemo(() => {
+    if (!draft) return [];
+    const template = templates.find((t) => t.id === draft.templateId);
+    return [
+      {
+        id: "draft",
+        fileName: draft.fileName || "brouillon en cours",
+        category: template?.category || "",
+        detail: `Atelier de revue laissé en cours (${draft.rows.length} variables) — reprendre pour continuer`,
+        action: "Reprendre",
+      },
+    ];
+  }, [draft, templates]);
 
   const NAV_GROUPS: { label: string; items: { view: View; label: string; icon: string; count?: string }[] }[] = [
     {
@@ -178,12 +187,12 @@ export default function AppShell() {
           </div>
 
           <div className="flex items-center gap-2.5 border-t border-secondary pt-2.5">
-            <span className="grid size-[26px] shrink-0 place-items-center rounded-full border border-[#5C4420] bg-accent/13 text-[10.5px] font-semibold text-accent">
-              ML
+            <span className="grid size-[26px] shrink-0 place-items-center overflow-hidden rounded-full border border-[#5C4420] bg-accent/13">
+              <Image src="/logo-its.png" alt="ITS" width={26} height={26} className="size-full object-cover" />
             </span>
             <div className="flex min-w-0 flex-col">
-              <span className="truncate text-xs text-secondary-foreground">m.leroy</span>
-              <span className="text-[10px] text-muted-foreground">Infra Azure</span>
+              <span className="truncate text-xs text-secondary-foreground">Pôle Microsoft</span>
+              <span className="text-[10px] text-muted-foreground">Terraform Azure</span>
             </div>
             <button
               type="button"
@@ -220,16 +229,20 @@ export default function AppShell() {
               setGenerateTemplateId(undefined);
               setView("generate");
             }}
-            onResume={() => setView("generate")}
+            onResume={() => {
+              setGenerateTemplateId(undefined);
+              setView("generate");
+            }}
             onOpenHistory={() => setView("history")}
             onDelete={handleDelete}
             onSearch={() => setSearchOpen(true)}
+            onTemplatesChanged={refetchAll}
           />
         )}
 
         {view !== "dashboard" && (
           <div className="tfgen-scroll min-h-0 flex-1 overflow-y-auto">
-            <div className="max-w-[1180px] px-5.5 pb-14 pt-6">
+            <div className={cn("px-5.5 pb-14 pt-6", view !== "generate" && "max-w-[1180px]")}>
               {view === "generate" && (
                 <GenerateView
                   key={generateTemplateId || "none"}
@@ -252,7 +265,7 @@ export default function AppShell() {
               )}
 
               {view === "history" && (
-                <HistoryView generations={generations} loading={loading} onDeleted={refetchAll} />
+                <HistoryView onDeleted={refetchAll} />
               )}
 
               {view === "edit-tfvars" && (

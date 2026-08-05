@@ -1,6 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
+import { CopyButton } from "./copy-button";
 
 export type TfvarsLine =
   | { kind: "blank" }
@@ -10,11 +11,14 @@ export type TfvarsLine =
 
 export function TfvarsPreview({
   lines,
+  content,
   fileName = "terraform.tfvars",
   meta,
   showLineNumbers = true,
 }: {
   lines: TfvarsLine[];
+  /** Texte brut du .tfvars — si fourni, affiche un bouton "Copier". */
+  content?: string;
   fileName?: string;
   meta?: string;
   showLineNumbers?: boolean;
@@ -28,6 +32,7 @@ export function TfvarsPreview({
           <span className="h-2.5 w-2.5 rounded-sm border-l-2 border-diff bg-diff/35" />
           valeur issue de la fiche
         </span>
+        {content && <CopyButton text={content} />}
       </div>
 
       <div className="tfgen-scroll overflow-x-auto py-2.5 font-mono text-[12.5px] leading-[22px]">

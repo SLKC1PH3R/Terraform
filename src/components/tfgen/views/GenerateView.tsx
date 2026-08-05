@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Icon, ICONS } from "../icons";
 import { CategoryBadge, CategoryTile } from "../categories";
 import { StatusPill } from "../status-pill";
 import { Stepper } from "../stepper";
@@ -14,6 +15,7 @@ import { buildTfvars, deriveRgExtractedFields, deriveVmExtractedFields } from "@
 import { isStorageAccountTemplate } from "@/lib/storage-account-generator";
 import { ApiTemplate, ApiTemplateVariable, CATEGORY_LABELS, isVmCategory, toDesignCategory } from "./shared";
 import { buildSections, contentToLines, deriveFileName, rowState, type BuildResult, type Row } from "./tfvarsRender";
+import { clearDraft, loadDraft, saveDraft } from "./generate-draft";
 
 function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -25,6 +27,21 @@ function fileToBase64(file: File): Promise<string> {
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
+}
+
+/** Déclenche un téléchargement immédiat côté client, sans passer par le
+ * serveur — le contenu affiché dans l'atelier de revue (aperçu live) est
+ * déjà le résultat final. */
+function downloadTextFile(filename: string, content: string) {
+  const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 }
 
 interface RgInfo {
@@ -182,6 +199,7 @@ export default function GenerateView({
   const [generating, setGenerating] = useState(false);
   const [result, setResult] = useState<BuildResult | null>(null);
   const [diffOnly, setDiffOnly] = useState(false);
+  const [justGenerated, setJustGenerated] = useState(false);
 
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [batchRunning, setBatchRunning] = useState(false);
@@ -194,6 +212,42 @@ export default function GenerateView({
   const [saExtractedList, setSaExtractedList] = useState<{ key: string; value: string }[][]>([]);
 
   const [openRgSections, setOpenRgSections] = useState<Record<string, boolean>>({});
+
+  // Brouillon de l'atelier de revue (étape 3) : proposé au chargement si un
+  // brouillon existe et qu'aucun template précis n'a été demandé (ex. clic
+  // sur "Générer" depuis une carte de template, où l'intention est de
+  // repartir de zéro pour ce template-là).
+  const [draftBanner, setDraftBanner] = useState<{ templateId: string; fileName: string; rows: Row[] } | null>(null);
+
+  useEffect(() => {
+    if (initialTemplateId) return;
+    const draft = loadDraft();
+    if (draft) setDraftBanner(draft);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Sauvegarde automatique (débattue par React lui-même via la dépendance à
+  // `rows`, qui ne change que sur une vraie édition) dès qu'il y a un
+  // brouillon significatif en cours à l'étape 3.
+  useEffect(() => {
+    if (step >= 3 && templateId && rows.length > 0) {
+      saveDraft({ templateId, fileName, rows });
+    }
+  }, [step, templateId, fileName, rows]);
+
+  function resumeDraft() {
+    if (!draftBanner) return;
+    setTemplateId(draftBanner.templateId);
+    setFileName(draftBanner.fileName);
+    setRows(draftBanner.rows);
+    setStep(3);
+    setDraftBanner(null);
+  }
+
+  function discardDraft() {
+    clearDraft();
+    setDraftBanner(null);
+  }
 
   const selectedTemplate = templates.find((t) => t.id === templateId);
   const isStorageAccount = isStorageAccountTemplate(selectedTemplate?.tfContent);
@@ -452,10 +506,34 @@ export default function GenerateView({
   }
 
   async function handleGenerate() {
-    if (!selectedTemplate) return;
-    setGenerating(true);
+    if (!selectedTemplate || !livePreview) return;
     setError("");
+    setJustGenerated(false);
 
+    // Téléchargement instantané côté client : l'aperçu live affiché dans
+    // l'atelier de revue EST déjà le résultat final, pas la peine d'attendre
+    // le serveur pour l'obtenir. La sauvegarde en base (historique) suit en
+    // tâche de fond, sans bloquer la suite.
+    downloadTextFile(deriveFileName(livePreview.content, selectedTemplate.name), livePreview.content);
+    clearDraft();
+
+    let rgTemplate: ApiTemplate | undefined;
+    if (createRg && rgInfo) {
+      rgTemplate = templates.find((t) => t.id === rgInfo.templateId);
+      if (rgTemplate?.tfContent) {
+        const rgLive = buildTfvars(
+          rgInfo.rows.map((r) => ({ name: r.name, type: r.type, defaultValue: r.defaultValue, finalValue: r.finalValue, group: r.group })),
+          rgTemplate.tfContent
+        );
+        downloadTextFile(deriveFileName(rgLive.content, "rg"), rgLive.content);
+      }
+    }
+
+    setResult({ id: "", content: livePreview.content, diff: livePreview.diff });
+    setStep(4);
+    setJustGenerated(true);
+
+    setGenerating(true);
     const sourceFileBase64 = sourceFile ? await fileToBase64(sourceFile) : undefined;
     const sourceFileMime = sourceFile?.type || undefined;
 
@@ -481,13 +559,13 @@ export default function GenerateView({
 
     if (!res.ok) {
       setGenerating(false);
-      setError(data.error || "Erreur lors de la génération");
+      setError(data.error || "Le fichier a bien été téléchargé, mais l'enregistrement dans l'historique a échoué.");
       return;
     }
 
     setResult(data);
 
-    if (createRg && rgInfo) {
+    if (createRg && rgInfo && rgTemplate) {
       const rgRes = await fetch("/api/generate/build", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -509,18 +587,35 @@ export default function GenerateView({
       if (rgRes.ok) {
         setRgResult(rgData);
       } else {
-        setError(rgData.error || "Erreur lors de la génération du Resource Group");
+        setError(rgData.error || "Erreur lors de l'enregistrement du Resource Group dans l'historique");
       }
     }
 
     setGenerating(false);
-    setStep(4);
     onGenerated?.();
   }
 
   return (
     <div className="flex flex-col gap-6.5">
       <h1 className="m-0 text-[30px] font-semibold">Génération</h1>
+
+      {draftBanner && (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-accent/40 bg-accent/10 px-4 py-3">
+          <Icon path={ICONS.warning} size={16} className="shrink-0 text-accent" />
+          <div className="flex-1 text-[13px] text-secondary-foreground">
+            Un brouillon de génération a été trouvé
+            {draftBanner.fileName ? ` (${draftBanner.fileName})` : ""} — reprendre là où vous en étiez ?
+          </div>
+          <div className="flex gap-2">
+            <Button variant="generate" size="sm" onClick={resumeDraft}>
+              Reprendre
+            </Button>
+            <Button size="sm" onClick={discardDraft}>
+              Ignorer
+            </Button>
+          </div>
+        </div>
+      )}
 
       <Stepper
         current={step}
@@ -718,6 +813,7 @@ export default function GenerateView({
           <ReviewWorkbench
             sections={sections}
             lines={livePreview ? contentToLines(livePreview.content, livePreview.diff) : []}
+            content={livePreview?.content}
             sourceFields={sourceFields}
             diffOnly={diffOnly}
             onDiffOnlyChange={setDiffOnly}
@@ -805,16 +901,29 @@ export default function GenerateView({
 
       {step === 4 && result && (
         <>
+          {justGenerated && (
+            <div className="tfgen-rise flex items-center gap-2 rounded-xl border border-primary/40 bg-primary/10 px-3.5 py-2.5 text-[13px] text-[#9BE3B8]">
+              <Icon path={ICONS.check} size={15} className="shrink-0" />
+              Généré avec succès — le fichier a été téléchargé automatiquement.
+            </div>
+          )}
           <div className="flex items-center gap-2.5">
             <StatusPill tone="ok">{result.diff.filter((d) => d.changed).length} lignes surlignées</StatusPill>
+            {generating && <StatusPill tone="neutral">Enregistrement dans l'historique…</StatusPill>}
             <div className="ml-auto flex gap-2">
-              <Button variant="default" onClick={() => window.open(`/api/generate/${result.id}/download`, "_blank")}>
-                Télécharger le .tfvars
+              <Button
+                variant="default"
+                disabled={!result.id}
+                title={!result.id ? "Enregistrement en cours…" : undefined}
+                onClick={() => window.open(`/api/generate/${result.id}/download`, "_blank")}
+              >
+                Retélécharger le .tfvars
               </Button>
             </div>
           </div>
           <TfvarsPreview
             lines={contentToLines(result.content, result.diff)}
+            content={result.content}
             fileName={deriveFileName(result.content, selectedTemplate?.name || "template")}
             meta={`généré depuis ${selectedTemplate?.name || ""}`}
           />
@@ -833,6 +942,7 @@ export default function GenerateView({
               </div>
               <TfvarsPreview
                 lines={contentToLines(rgResult.content, rgResult.diff)}
+                content={rgResult.content}
                 fileName={deriveFileName(rgResult.content, "rg")}
                 meta="resource group"
               />

@@ -200,6 +200,7 @@ export default function EditTfvarsView({
               </div>
               <TfvarsPreview
                 lines={contentToLines(result.content, result.diff)}
+                content={result.content}
                 fileName={deriveFileName(result.content, detail.template.name)}
                 meta={`régénéré depuis ${detail.template.name}`}
               />

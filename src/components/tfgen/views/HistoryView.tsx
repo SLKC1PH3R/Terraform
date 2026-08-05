@@ -1,21 +1,50 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { CategoryBadge } from "../categories";
 import { ApiGeneration, formatRelative, toDesignCategory } from "./shared";
 
+const PAGE_SIZE = 50;
+
 export default function HistoryView({
-  generations,
-  loading,
   onDeleted,
 }: {
-  generations: ApiGeneration[];
-  loading: boolean;
   onDeleted: () => void;
 }) {
+  const [items, setItems] = useState<ApiGeneration[]>([]);
+  const [total, setTotal] = useState<number | null>(null);
+  const [hasMore, setHasMore] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState("");
+
+  async function fetchPage(skip: number) {
+    const res = await fetch(`/api/generations?take=${PAGE_SIZE}&skip=${skip}`);
+    const data = await res.json();
+    return data as { items: ApiGeneration[]; total: number; hasMore: boolean };
+  }
+
+  useEffect(() => {
+    setLoading(true);
+    fetchPage(0)
+      .then((data) => {
+        setItems(data.items);
+        setTotal(data.total);
+        setHasMore(data.hasMore);
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
+  async function loadMore() {
+    setLoadingMore(true);
+    const data = await fetchPage(items.length);
+    setItems((prev) => [...prev, ...data.items]);
+    setTotal(data.total);
+    setHasMore(data.hasMore);
+    setLoadingMore(false);
+  }
 
   async function handleDelete(id: string, fileName: string) {
     if (!confirm(`Supprimer « ${fileName} » et le .tfvars généré ? Cette action est irréversible.`)) return;
@@ -29,6 +58,8 @@ export default function HistoryView({
       setError("Erreur lors de la suppression");
       return;
     }
+    setItems((prev) => prev.filter((g) => g.id !== id));
+    setTotal((t) => (t !== null ? t - 1 : t));
     onDeleted();
   }
 
@@ -37,8 +68,14 @@ export default function HistoryView({
       <div>
         <h1 className="mb-1.5 text-[28px] font-semibold">Historique</h1>
         <p className="m-0 text-[13px] text-muted-foreground">
-          Fiches importées et fichiers .tfvars générés — {generations.length} entrée
-          {generations.length > 1 ? "s" : ""}.
+          Fiches importées et fichiers .tfvars générés
+          {total !== null && (
+            <>
+              {" "}
+              — {items.length} / {total} entrée{total > 1 ? "s" : ""}
+            </>
+          )}
+          .
         </p>
       </div>
 
@@ -54,12 +91,12 @@ export default function HistoryView({
 
         {loading ? (
           <div className="p-4 text-[12.5px] text-muted-foreground">Chargement...</div>
-        ) : generations.length === 0 ? (
+        ) : items.length === 0 ? (
           <div className="p-4 text-[12.5px] text-muted-foreground">
             Aucune génération pour le moment.
           </div>
         ) : (
-          generations.map((g) => (
+          items.map((g) => (
             <div
               key={g.id}
               className="grid grid-cols-[1.6fr_1.3fr_1fr_auto] items-center gap-3 border-b border-border px-4 py-2.5 last:border-b-0"
@@ -98,6 +135,14 @@ export default function HistoryView({
           ))
         )}
       </div>
+
+      {hasMore && (
+        <div className="flex justify-center">
+          <Button onClick={loadMore} disabled={loadingMore}>
+            {loadingMore ? "Chargement..." : `Charger plus (${(total ?? 0) - items.length} restantes)`}
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

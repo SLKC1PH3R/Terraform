@@ -1,6 +1,7 @@
 "use client";
 
 import { CategoryTile, metaFor } from "./category-meta";
+import { Icon, ICONS } from "./icons";
 
 export interface TemplateCardData {
   id: string;
@@ -19,10 +20,14 @@ export function TemplateCard({
   template,
   onEdit,
   onGenerate,
+  onDuplicate,
+  onDelete,
 }: {
   template: TemplateCardData;
   onEdit?: () => void;
   onGenerate?: () => void;
+  onDuplicate?: () => void;
+  onDelete?: () => void;
 }) {
   const meta = metaFor(template.category);
 
@@ -46,7 +51,27 @@ export function TemplateCard({
         </span>
         <span className="size-[3px] rounded-full bg-[#38342E]" />
         <span className="text-[10.5px] text-muted-foreground">{template.updatedAt}</span>
-        <div className="ml-auto flex gap-1.5">
+        <div className="ml-auto flex items-center gap-1.5">
+          {onDuplicate && (
+            <button
+              type="button"
+              onClick={onDuplicate}
+              title="Dupliquer ce template"
+              className="grid size-[26px] shrink-0 place-items-center rounded-lg border border-border bg-transparent text-muted-foreground transition-colors hover:border-[#38342E] hover:bg-secondary hover:text-secondary-foreground"
+            >
+              <Icon path={ICONS.copyDuplicate} size={12} />
+            </button>
+          )}
+          {onDelete && (
+            <button
+              type="button"
+              onClick={onDelete}
+              title="Supprimer ce template"
+              className="grid size-[26px] shrink-0 place-items-center rounded-lg border border-border bg-transparent text-muted-foreground transition-colors hover:border-[#54302A] hover:text-destructive"
+            >
+              <Icon path={ICONS.trash} size={12} />
+            </button>
+          )}
           <button
             type="button"
             onClick={onEdit}

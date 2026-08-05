@@ -4,6 +4,8 @@ import * as React from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { CategoryIcon, categoryClasses } from "./categories";
+import { Icon, ICONS } from "./icons";
+import { CopyButton } from "./copy-button";
 import type { VariableSectionData, VariableState } from "./variable-section";
 import type { TfvarsLine } from "./tfvars-preview";
 
@@ -45,6 +47,7 @@ const GRID = "grid grid-cols-[1.4fr_1fr_1.2fr_74px] gap-3 px-3.5";
 export function ReviewWorkbench({
   sections,
   lines,
+  content,
   sourceFields,
   diffOnly = false,
   showLineNumbers = true,
@@ -56,6 +59,8 @@ export function ReviewWorkbench({
 }: {
   sections: VariableSectionData[];
   lines: TfvarsLine[];
+  /** Texte brut du .tfvars (aperçu live) — si fourni, affiche un bouton "Copier". */
+  content?: string;
   /** Champs bruts de la ou des fiches importées (avant matching), affichés
    * dans l'onglet "fiche source". Onglet masqué si absent/vide. */
   sourceFields?: SourceFieldGroup[];
@@ -70,6 +75,7 @@ export function ReviewWorkbench({
   className?: string;
 }) {
   const hasSourceFields = !!sourceFields && sourceFields.some((g) => g.entries.length > 0);
+  const [query, setQuery] = React.useState("");
 
   const [showFields, setShowFields] = React.useState(true);
   const [showDiff, setShowDiff] = React.useState(true);
@@ -87,9 +93,13 @@ export function ReviewWorkbench({
     return () => window.removeEventListener("keydown", onKey);
   }, [diffOnly, onDiffOnlyChange, onGenerate]);
 
-  const visible = diffOnly
-    ? sections.map((s) => ({ ...s, rows: s.rows.filter((r) => r.state !== "default") }))
-    : sections;
+  const q = query.trim().toLowerCase();
+  const visible = sections
+    .map((s) => ({
+      ...s,
+      rows: s.rows.filter((r) => (!diffOnly || r.state !== "default") && (!q || r.name.toLowerCase().includes(q))),
+    }))
+    .filter((s) => s.rows.length > 0);
 
   const cols = [
     hasSourceFields ? (showFields ? "0.85fr" : "0fr") : null,
@@ -209,6 +219,24 @@ export function ReviewWorkbench({
         )}
 
         <div className={cn("flex min-w-0 flex-col overflow-hidden border-r border-border", !showDiff && "invisible")}>
+          <div className="flex shrink-0 items-center gap-2 border-b border-border px-3.5 py-1.5">
+            <Icon path={ICONS.search} size={12} className="shrink-0 text-muted-foreground" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Filtrer les variables…"
+              className="min-w-0 flex-1 bg-transparent font-mono text-[11.5px] text-foreground outline-none placeholder:text-muted-foreground"
+            />
+            {query && (
+              <button
+                type="button"
+                onClick={() => setQuery("")}
+                className="shrink-0 text-[10px] text-muted-foreground hover:text-foreground"
+              >
+                effacer
+              </button>
+            )}
+          </div>
           <div
             className={cn(
               GRID,
@@ -297,6 +325,7 @@ export function ReviewWorkbench({
               <span className="h-2.5 w-2.5 rounded-sm border-l-2 border-diff bg-diff/35" />
               issu de la fiche
             </span>
+            {content && <CopyButton text={content} />}
           </div>
 
           <div className="tfgen-scroll min-h-0 flex-1 overflow-auto py-2 font-mono text-xs leading-5">

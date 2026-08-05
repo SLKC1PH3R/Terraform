@@ -31,6 +31,7 @@ export default function DashboardView({
   onOpenHistory,
   onDelete,
   onSearch,
+  onTemplatesChanged,
 }: {
   templates: ApiTemplate[];
   generations: ApiGeneration[];
@@ -44,8 +45,44 @@ export default function DashboardView({
   onOpenHistory: () => void;
   onDelete?: (generation: ApiGeneration) => void;
   onSearch?: () => void;
+  /** Rafraîchit la liste des templates après duplication/suppression. */
+  onTemplatesChanged?: () => void;
 }) {
   const [family, setFamily] = useState<string>("Tous");
+
+  async function handleDuplicate(id: string) {
+    const source = templates.find((t) => t.id === id);
+    if (!source) return;
+
+    await fetch("/api/templates", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: `${source.name} (copie)`,
+        category: source.category,
+        description: source.description,
+        tfContent: source.tfContent,
+        variables: source.variables.map((v) => ({
+          name: v.name,
+          type: v.type,
+          defaultValue: v.defaultValue,
+          description: v.description,
+          group: v.group,
+        })),
+      }),
+    });
+
+    onTemplatesChanged?.();
+  }
+
+  async function handleDeleteTemplate(id: string) {
+    const source = templates.find((t) => t.id === id);
+    if (!source) return;
+    if (!confirm(`Supprimer le template « ${source.name} » ? Cette action est irréversible.`)) return;
+
+    await fetch(`/api/templates/${id}`, { method: "DELETE" });
+    onTemplatesChanged?.();
+  }
 
   const cards: TemplateCardData[] = useMemo(
     () =>
@@ -132,6 +169,8 @@ export default function DashboardView({
                     template={card}
                     onEdit={() => onEdit(card.id)}
                     onGenerate={() => onGenerate(card.id)}
+                    onDuplicate={() => handleDuplicate(card.id)}
+                    onDelete={() => handleDeleteTemplate(card.id)}
                   />
                 ))
               )}
