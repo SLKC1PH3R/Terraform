@@ -531,10 +531,18 @@ const SERVER_TYPE_TO_VM_TYPE: Record<string, string> = {
  *   RG par deriveRgExtractedFields, ex. "ppd" -> "u")
  * - vm_type ("infrastructure" ou "application"), déduit du champ FIS
  *   "Type de serveur : Infra /Appli"
- * - "Gabarits VM" -> vm1_size, "Availability Zone" -> vm1_zone, dernier octet
- *   de "IP 1" -> vm1_hostnum (repris tels quels par vm2_/vm3_/... lors d'une
- *   fusion, chaque fiche source portant ses propres valeurs sous la clé
- *   "vm1_*" avant renumérotation du jeton — cf. matchRowsForMerge)
+ * - "Gabarits VM" -> vm1_size, "Availability Zone" -> vm1_zone
+ * - "OS (publisher)" -> vm1_image_publisher, "OS (Offer)" -> vm1_image_offer,
+ *   "OS (SKU)" -> vm1_image_sku, "OS (Image Version)" -> vm1_image_version
+ *   (templates "Marketplace" — WIN-Market, LNX-Market)
+ * (repris tels quels par vm2_/vm3_/... lors d'une fusion, chaque fiche
+ * source portant ses propres valeurs sous la clé "vm1_*" avant
+ * renumérotation du jeton — cf. matchRowsForMerge)
+ *
+ * `vm1_hostnum` n'est PAS déduit automatiquement (l'ancienne déduction à
+ * partir du dernier octet de "IP 1" ne correspondait pas fiablement à la
+ * numérotation attendue dans le subnet) : c'est un champ obligatoire à
+ * saisir à la main dans l'atelier de revue — cf. GenerateView.tsx.
  * Chaque alias n'est ajouté que si la valeur source est présente.
  */
 export function deriveVmExtractedFields(
@@ -554,6 +562,10 @@ export function deriveVmExtractedFields(
   alias("v_net", "vnet_name");
   alias("gabarits_vm", "vm1_size");
   alias("availability_zone", "vm1_zone");
+  alias("os_publisher", "vm1_image_publisher");
+  alias("os_offer", "vm1_image_offer");
+  alias("os_sku", "vm1_image_sku");
+  alias("os_image_version", "vm1_image_version");
 
   const env = map.get("env");
   const vmEnvLetter = env ? ENV_TO_VM_ENV[env] : undefined;
@@ -580,16 +592,6 @@ export function deriveVmExtractedFields(
   if (serverType) {
     const vmType = SERVER_TYPE_TO_VM_TYPE[serverType.trim().toLowerCase()];
     if (vmType) result.push({ key: "vm_type", value: vmType });
-  }
-
-  // Dernier octet de "IP 1" (ex. "172.18.5.11" -> "11"), utilisé pour
-  // l'indexation de l'IP statique dans le subnet.
-  const ip1 = map.get("ip_1");
-  if (ip1) {
-    const lastOctet = ip1.trim().split(".").pop();
-    if (lastOctet && /^\d+$/.test(lastOctet)) {
-      result.push({ key: "vm1_hostnum", value: lastOctet });
-    }
   }
 
   return result;

@@ -9,6 +9,10 @@ export interface Row {
   finalValue: string;
   matched: boolean;
   group: string;
+  /** Champ à saisie obligatoire (ex. vmN_hostnum) : une valeur vide est
+   * signalée comme "manquante" (bloque la génération) plutôt que "défaut" —
+   * cf. GenerateView.tsx. */
+  required?: boolean;
 }
 
 export interface DiffEntry {
@@ -25,7 +29,7 @@ export interface BuildResult {
 }
 
 export function rowState(r: Row): VariableRowData["state"] {
-  if (r.finalValue.trim() === "") return "missing";
+  if (r.finalValue.trim() === "") return r.required ? "missing" : "default";
   if (r.finalValue.trim() !== r.defaultValue.trim()) return "modified";
   return "default";
 }

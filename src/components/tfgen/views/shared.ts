@@ -68,6 +68,31 @@ export interface ApiTemplate {
   updatedAt: string;
 }
 
+/** Noms des 9 templates de base injectés par prisma/seed-templates.mjs
+ * depuis le dossier Model-Ressource/. Détection par nom (pas de champ dédié
+ * en base) : un template renommé perd sa protection, un doublon "(copie)"
+ * n'est jamais protégé. */
+export const PROTECTED_TEMPLATE_NAMES = new Set([
+  "Resource Group",
+  "Storage Account",
+  "ASG / NSG",
+  "VM Windows (Image)",
+  "VM Windows (Marketplace)",
+  "VM Linux (Image)",
+  "VM Linux (Marketplace)",
+  "Load Balancer",
+  "Key Vault",
+]);
+
+export function isProtectedTemplate(name: string): boolean {
+  return PROTECTED_TEMPLATE_NAMES.has(name);
+}
+
+/** Texte exact demandé par l'utilisateur pour le pop-up de confirmation
+ * affiché lorsqu'on tente de supprimer un template protégé. Ne pas reformuler. */
+export const PROTECTED_TEMPLATE_MESSAGE =
+  "Template de base venant du dossier Model Ressource de Fidal, il n'est pas conseillé de le supprimer, si besoin de travailler sur ce template vous pouvez le dupliquer et utiliser l'autre.\n\nCordialement l'équipe Microsoft";
+
 export interface ApiGeneration {
   id: string;
   fileName: string;

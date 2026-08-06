@@ -18,12 +18,16 @@ export interface TemplateCardData {
  */
 export function TemplateCard({
   template,
+  protected: isProtected,
   onEdit,
   onGenerate,
   onDuplicate,
   onDelete,
 }: {
   template: TemplateCardData;
+  /** Template de base (Model-Ressource) — affiche un cadenas informatif ;
+   * la suppression reste possible mais passe par un pop-up d'avertissement. */
+  protected?: boolean;
   onEdit?: () => void;
   onGenerate?: () => void;
   onDuplicate?: () => void;
@@ -36,7 +40,14 @@ export function TemplateCard({
       <div className="flex items-start gap-3">
         <CategoryTile category={template.category} />
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <span className="truncate font-mono text-[13px] text-foreground">{template.name}</span>
+          <span className="flex items-center gap-1.5 truncate font-mono text-[13px] text-foreground">
+            <span className="truncate">{template.name}</span>
+            {isProtected && (
+              <span title="Template de base — voir la duplication avant suppression" className="shrink-0 text-muted-foreground">
+                <Icon path={ICONS.lock} size={11} />
+              </span>
+            )}
+          </span>
           <span className={`text-[11px] ${meta.text}`}>{meta.label}</span>
         </div>
       </div>

@@ -53,6 +53,7 @@ export function ReviewWorkbench({
   showLineNumbers = true,
   onDiffOnlyChange,
   onGenerate,
+  generateDisabled,
   onValueChange,
   status,
   className,
@@ -68,6 +69,9 @@ export function ReviewWorkbench({
   showLineNumbers?: boolean;
   onDiffOnlyChange?: (value: boolean) => void;
   onGenerate?: () => void;
+  /** Bloque le bouton "Générer" (et le raccourci ⌘⏎) tant que des champs
+   * obligatoires (ex. vmN_hostnum) sont vides — cf. GenerateView.tsx. */
+  generateDisabled?: boolean;
   /** Identifie la variable par nom (et non par index), car l'index d'une
    * ligne se décale dès que le filtre "diff seulement" masque des lignes. */
   onValueChange?: (sectionId: string, rowName: string, value: string) => void;
@@ -87,11 +91,11 @@ export function ReviewWorkbench({
       const typing = target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA");
       if (typing && !((e.metaKey || e.ctrlKey) && e.key === "Enter")) return;
       if (e.shiftKey && e.key.toLowerCase() === "d") onDiffOnlyChange?.(!diffOnly);
-      if ((e.metaKey || e.ctrlKey) && e.key === "Enter") onGenerate?.();
+      if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && !generateDisabled) onGenerate?.();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [diffOnly, onDiffOnlyChange, onGenerate]);
+  }, [diffOnly, onDiffOnlyChange, onGenerate, generateDisabled]);
 
   const q = query.trim().toLowerCase();
   const visible = sections
@@ -171,7 +175,16 @@ export function ReviewWorkbench({
           >
             ⇧D diff
           </button>
-          <Button size="sm" onClick={onGenerate} title="Générer — raccourci ⌘⏎ / Ctrl+⏎">
+          <Button
+            size="sm"
+            onClick={onGenerate}
+            disabled={generateDisabled}
+            title={
+              generateDisabled
+                ? "Complétez les champs obligatoires (ex. n° d'hôte) avant de générer"
+                : "Générer — raccourci ⌘⏎ / Ctrl+⏎"
+            }
+          >
             Générer le .tfvars
           </Button>
         </div>

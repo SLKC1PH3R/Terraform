@@ -127,6 +127,27 @@ function applyVmServiceFullname(rows: Row[], extracted: { key: string; value: st
   );
 }
 
+const HOSTNUM_RE = /^vm\d+_hostnum$/i;
+
+/** Le "hostnum" (dernier segment de l'IP statique réservée dans le subnet)
+ * n'est volontairement jamais déduit automatiquement — la numérotation
+ * dans le subnet ne correspond pas fiablement au dernier octet de l'IP
+ * assignée. C'est un champ obligatoire : laissé vide pour forcer une
+ * saisie manuelle dans l'atelier de revue (bloque la génération tant
+ * qu'il n'est pas rempli — cf. hasMissingRequired plus bas). */
+function applyHostnumRule(rows: Row[]): Row[] {
+  return rows.map((r) =>
+    !r.group && HOSTNUM_RE.test(r.name) ? { ...r, finalValue: "", matched: false, required: true } : r
+  );
+}
+
+/** Sleep_Priority ne doit jamais hériter de la valeur par défaut du
+ * template ("100") quand la fiche FIS ne la renseigne pas explicitement —
+ * dans ce cas, la variable doit rester vide dans le .tfvars généré. */
+function applySleepPriorityRule(rows: Row[]): Row[] {
+  return rows.map((r) => (r.name === "Sleep_Priority" && !r.matched ? { ...r, finalValue: "" } : r));
+}
+
 /** Fait correspondre les valeurs extraites d'une fiche aux variables du
  * template pour fusionner plusieurs ressources du même type dans un seul
  * .tfvars. Le 1er fichier (index 1) garde les noms tels quels. Pour les
@@ -274,6 +295,7 @@ export default function GenerateView({
 
   const modifiedCount = rows.filter((r) => rowState(r) === "modified").length;
   const defaultCount = rows.length - modifiedCount;
+  const hasMissingRequired = rows.some((r) => rowState(r) === "missing");
 
   // Champs bruts de la ou des fiches importées, avant matching/déduction —
   // affichés dans l'onglet "fiche source" de l'atelier de revue.
@@ -367,6 +389,7 @@ export default function GenerateView({
     setSourceFile(uf.file);
     let newRows = matchRows(selectedTemplate.variables, uf.extracted);
     if (isVmCategory(selectedTemplate.category)) newRows = applyVmServiceFullname(newRows, uf.extracted);
+    newRows = applySleepPriorityRule(applyHostnumRule(newRows));
     setRows(newRows);
     setStep(3);
     setupRgInfo(uf);
@@ -390,6 +413,7 @@ export default function GenerateView({
     if (isVmCategory(selectedTemplate.category)) {
       combined = applyVmServiceFullname(combined, uploadedFiles[0].extracted);
     }
+    combined = applySleepPriorityRule(applyHostnumRule(combined));
     setRows(combined);
     setFileName(uploadedFiles.map((f) => f.fileName).join(" + "));
     setSourceFile(uploadedFiles[0].file);
@@ -407,6 +431,10 @@ export default function GenerateView({
     for (const uf of uploadedFiles) {
       let rowsForFile = matchRows(selectedTemplate.variables, uf.extracted);
       if (isVmCategory(selectedTemplate.category)) rowsForFile = applyVmServiceFullname(rowsForFile, uf.extracted);
+      // Pas d'étape de revue en génération par lot : impossible de bloquer sur
+      // un hostnum manquant, on laisse donc la valeur par défaut du template
+      // plutôt qu'un champ vide qui produirait un .tfvars incomplet sans recours.
+      rowsForFile = applySleepPriorityRule(rowsForFile);
       const sourceFileBase64 = await fileToBase64(uf.file);
 
       const res = await fetch("/api/generate/build", {
@@ -506,7 +534,7 @@ export default function GenerateView({
   }
 
   async function handleGenerate() {
-    if (!selectedTemplate || !livePreview) return;
+    if (!selectedTemplate || !livePreview || hasMissingRequired) return;
     setError("");
     setJustGenerated(false);
 
@@ -818,6 +846,7 @@ export default function GenerateView({
             diffOnly={diffOnly}
             onDiffOnlyChange={setDiffOnly}
             onGenerate={handleGenerate}
+            generateDisabled={hasMissingRequired}
             onValueChange={(sectionId, rowName, value) =>
               updateRowByIdentity(sectionId === "_root" ? "" : sectionId, rowName, value)
             }
@@ -858,9 +887,20 @@ export default function GenerateView({
             </div>
           )}
 
+          {hasMissingRequired && (
+            <p className="text-[12.5px] text-destructive">
+              Des champs obligatoires sont vides (ex. hostnum) — remplissez-les pour pouvoir générer.
+            </p>
+          )}
+
           <div className="flex justify-end gap-2">
             <Button onClick={() => setStep(2)}>Retour</Button>
-            <Button variant="generate" onClick={handleGenerate} disabled={generating}>
+            <Button
+              variant="generate"
+              onClick={handleGenerate}
+              disabled={generating || hasMissingRequired}
+              title={hasMissingRequired ? "Des champs obligatoires sont vides" : undefined}
+            >
               {generating ? "Génération..." : "Générer le .tfvars"}
             </Button>
           </div>

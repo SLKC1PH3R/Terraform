@@ -6,8 +6,9 @@ import { ICONS } from "../icons";
 import { FAMILIES, metaFor } from "../category-meta";
 import { ResumeQueue, type ResumeItem } from "../resume-queue";
 import { TemplateCard, TemplateCardSkeleton, type TemplateCardData } from "../template-card";
+import { ProtectedDeleteDialog } from "../protected-delete-dialog";
 import { GenerationsTable } from "../generations-table";
-import { ApiGeneration, ApiTemplate, CATEGORY_LABELS, formatRelative } from "./shared";
+import { ApiGeneration, ApiTemplate, CATEGORY_LABELS, formatRelative, isProtectedTemplate } from "./shared";
 
 /**
  * v2 dashboard. Trois changements par rapport à v1 :
@@ -75,13 +76,26 @@ export default function DashboardView({
     onTemplatesChanged?.();
   }
 
-  async function handleDeleteTemplate(id: string) {
-    const source = templates.find((t) => t.id === id);
-    if (!source) return;
-    if (!confirm(`Supprimer le template « ${source.name} » ? Cette action est irréversible.`)) return;
+  const [protectedDeleteTarget, setProtectedDeleteTarget] = useState<{ id: string; name: string } | null>(
+    null,
+  );
 
+  async function deleteTemplate(id: string) {
     await fetch(`/api/templates/${id}`, { method: "DELETE" });
     onTemplatesChanged?.();
+  }
+
+  function handleDeleteTemplate(id: string) {
+    const source = templates.find((t) => t.id === id);
+    if (!source) return;
+
+    if (isProtectedTemplate(source.name)) {
+      setProtectedDeleteTarget({ id: source.id, name: source.name });
+      return;
+    }
+
+    if (!confirm(`Supprimer le template « ${source.name} » ? Cette action est irréversible.`)) return;
+    deleteTemplate(id);
   }
 
   const cards: TemplateCardData[] = useMemo(
@@ -167,6 +181,7 @@ export default function DashboardView({
                   <TemplateCard
                     key={card.id}
                     template={card}
+                    protected={isProtectedTemplate(card.name)}
                     onEdit={() => onEdit(card.id)}
                     onGenerate={() => onGenerate(card.id)}
                     onDuplicate={() => handleDuplicate(card.id)}
@@ -198,6 +213,17 @@ export default function DashboardView({
           </section>
         </div>
       </div>
+
+      {protectedDeleteTarget && (
+        <ProtectedDeleteDialog
+          templateName={protectedDeleteTarget.name}
+          onCancel={() => setProtectedDeleteTarget(null)}
+          onConfirm={() => {
+            deleteTemplate(protectedDeleteTarget.id);
+            setProtectedDeleteTarget(null);
+          }}
+        />
+      )}
     </>
   );
 }
