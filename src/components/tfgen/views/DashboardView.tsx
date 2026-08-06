@@ -35,15 +35,15 @@ const TEMPLATE_COLUMNS: { key: string; title: string; match: (c: TemplateCardDat
     title: "VM Marketplace",
     match: (c) => c.category === "VM" && /marketplace/i.test(c.name),
   },
+  { key: "NSG_ASG", title: "ASG / NSG", match: (c) => c.category === "NSG_ASG" },
   {
     key: "VM_IMAGE",
     title: "VM Image",
     match: (c) => c.category === "VM" && /image/i.test(c.name),
   },
-  { key: "NSG_ASG", title: "ASG / NSG", match: (c) => c.category === "NSG_ASG" },
+  { key: "KEY_VAULT", title: "Key Vault", match: (c) => c.category === "KEY_VAULT" },
   { key: "STORAGE", title: "Storage Account", match: (c) => c.category === "STORAGE" },
   { key: "LOAD_BALANCER", title: "Load Balancer", match: (c) => c.category === "LOAD_BALANCER" },
-  { key: "KEY_VAULT", title: "Key Vault", match: (c) => c.category === "KEY_VAULT" },
 ];
 
 interface TemplateColumn {
@@ -239,9 +239,9 @@ export default function DashboardView({
                 </button>
               </p>
             ) : (
-              <div className="grid grid-cols-[repeat(auto-fill,minmax(310px,1fr))] items-start gap-5">
+              <div className="columns-[310px] gap-5">
                 {columns.map((col) => (
-                  <div key={col.key} className="flex flex-col gap-2.5">
+                  <div key={col.key} className="mb-5 flex flex-col gap-2.5 break-inside-avoid">
                     <div className="flex items-center gap-2 px-0.5">
                       <CategoryTile category={col.category} size={22} />
                       <span className="text-[12px] font-semibold tracking-[-0.01em] text-foreground">
