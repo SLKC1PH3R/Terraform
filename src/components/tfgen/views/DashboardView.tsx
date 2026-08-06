@@ -239,7 +239,7 @@ export default function DashboardView({
                 </button>
               </p>
             ) : (
-              <div className="grid grid-cols-[repeat(auto-fill,minmax(270px,1fr))] items-start gap-4">
+              <div className="grid grid-cols-[repeat(auto-fill,minmax(310px,1fr))] items-start gap-5">
                 {columns.map((col) => (
                   <div key={col.key} className="flex flex-col gap-2.5">
                     <div className="flex items-center gap-2 px-0.5">

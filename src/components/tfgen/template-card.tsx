@@ -56,47 +56,53 @@ export function TemplateCard({
         {template.description}
       </p>
 
-      <div className="flex items-center gap-2 border-t border-secondary pt-3">
-        <span className="font-mono text-[10.5px] tabular-nums text-muted-foreground">
-          {template.variableCount} variables
-        </span>
-        <span className="size-[3px] rounded-full bg-[#38342E]" />
-        <span className="text-[10.5px] text-muted-foreground">{template.updatedAt}</span>
-        <div className="ml-auto flex items-center gap-1.5">
-          {onDuplicate && (
+      <div className="flex flex-col gap-2.5 border-t border-secondary pt-3">
+        <div className="flex items-center gap-2">
+          <span className="shrink-0 whitespace-nowrap font-mono text-[10.5px] tabular-nums text-muted-foreground">
+            {template.variableCount} variables
+          </span>
+          <span className="size-[3px] shrink-0 rounded-full bg-[#38342E]" />
+          <span className="whitespace-nowrap text-[10.5px] text-muted-foreground">{template.updatedAt}</span>
+        </div>
+        <div className="flex items-center justify-between gap-1.5">
+          <div className="flex items-center gap-1.5">
+            {onDuplicate && (
+              <button
+                type="button"
+                onClick={onDuplicate}
+                title="Dupliquer ce template"
+                className="grid size-[26px] shrink-0 place-items-center rounded-lg border border-border bg-transparent text-muted-foreground transition-colors hover:border-[#38342E] hover:bg-secondary hover:text-secondary-foreground"
+              >
+                <Icon path={ICONS.copyDuplicate} size={12} />
+              </button>
+            )}
+            {onDelete && (
+              <button
+                type="button"
+                onClick={onDelete}
+                title="Supprimer ce template"
+                className="grid size-[26px] shrink-0 place-items-center rounded-lg border border-border bg-transparent text-muted-foreground transition-colors hover:border-[#54302A] hover:text-destructive"
+              >
+                <Icon path={ICONS.trash} size={12} />
+              </button>
+            )}
+          </div>
+          <div className="flex shrink-0 items-center gap-1.5">
             <button
               type="button"
-              onClick={onDuplicate}
-              title="Dupliquer ce template"
-              className="grid size-[26px] shrink-0 place-items-center rounded-lg border border-border bg-transparent text-muted-foreground transition-colors hover:border-[#38342E] hover:bg-secondary hover:text-secondary-foreground"
+              onClick={onEdit}
+              className="whitespace-nowrap rounded-lg border border-border bg-transparent px-2.5 py-1 text-[11.5px] font-medium text-secondary-foreground transition-colors hover:border-[#38342E] hover:bg-secondary"
             >
-              <Icon path={ICONS.copyDuplicate} size={12} />
+              Éditer
             </button>
-          )}
-          {onDelete && (
             <button
               type="button"
-              onClick={onDelete}
-              title="Supprimer ce template"
-              className="grid size-[26px] shrink-0 place-items-center rounded-lg border border-border bg-transparent text-muted-foreground transition-colors hover:border-[#54302A] hover:text-destructive"
+              onClick={onGenerate}
+              className="whitespace-nowrap rounded-lg border border-[#5C4420] bg-accent/11 px-2.5 py-1 text-[11.5px] font-semibold text-[#F3C88C] transition-colors hover:border-accent hover:bg-accent/20"
             >
-              <Icon path={ICONS.trash} size={12} />
+              Générer
             </button>
-          )}
-          <button
-            type="button"
-            onClick={onEdit}
-            className="rounded-lg border border-border bg-transparent px-2.5 py-1 text-[11.5px] font-medium text-secondary-foreground transition-colors hover:border-[#38342E] hover:bg-secondary"
-          >
-            Éditer
-          </button>
-          <button
-            type="button"
-            onClick={onGenerate}
-            className="rounded-lg border border-[#5C4420] bg-accent/11 px-2.5 py-1 text-[11.5px] font-semibold text-[#F3C88C] transition-colors hover:border-accent hover:bg-accent/20"
-          >
-            Générer
-          </button>
+          </div>
         </div>
       </div>
     </div>
