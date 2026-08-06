@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { AppHeader, HeaderAction } from "../app-header";
 import { ICONS } from "../icons";
-import { FAMILIES, metaFor } from "../category-meta";
+import { CategoryTile, FAMILIES, metaFor } from "../category-meta";
 import { ResumeQueue, type ResumeItem } from "../resume-queue";
 import { TemplateCard, TemplateCardSkeleton, type TemplateCardData } from "../template-card";
 import { ProtectedDeleteDialog } from "../protected-delete-dialog";
@@ -19,6 +19,63 @@ import { ApiGeneration, ApiTemplate, CATEGORY_LABELS, formatRelative, isProtecte
  *
  * Le <h1> vit désormais dans AppHeader, cette vue démarre donc au contenu.
  */
+
+/**
+ * Colonnes de la grille de templates : un même type métier (ex. VM
+ * Marketplace) regroupe Linux et Windows dans une seule colonne au lieu
+ * d'une simple grille plate. "VM" est une seule catégorie DB, donc les deux
+ * sous-types (Marketplace / Image) se distinguent par le nom du template.
+ * Un template qui ne matche aucune règle (catégorie future, etc.) retombe
+ * dans une colonne générique par catégorie, ajoutée dynamiquement.
+ */
+const TEMPLATE_COLUMNS: { key: string; title: string; match: (c: TemplateCardData) => boolean }[] = [
+  { key: "RG", title: "Resource Group", match: (c) => c.category === "RG" },
+  {
+    key: "VM_MARKET",
+    title: "VM Marketplace",
+    match: (c) => c.category === "VM" && /marketplace/i.test(c.name),
+  },
+  {
+    key: "VM_IMAGE",
+    title: "VM Image",
+    match: (c) => c.category === "VM" && /image/i.test(c.name),
+  },
+  { key: "NSG_ASG", title: "ASG / NSG", match: (c) => c.category === "NSG_ASG" },
+  { key: "STORAGE", title: "Storage Account", match: (c) => c.category === "STORAGE" },
+  { key: "LOAD_BALANCER", title: "Load Balancer", match: (c) => c.category === "LOAD_BALANCER" },
+  { key: "KEY_VAULT", title: "Key Vault", match: (c) => c.category === "KEY_VAULT" },
+];
+
+interface TemplateColumn {
+  key: string;
+  title: string;
+  category: string;
+  items: TemplateCardData[];
+}
+
+function groupIntoColumns(cards: TemplateCardData[]): TemplateColumn[] {
+  const columns: TemplateColumn[] = [];
+  const remaining = new Set(cards.map((c) => c.id));
+
+  for (const def of TEMPLATE_COLUMNS) {
+    const items = cards.filter((c) => remaining.has(c.id) && def.match(c));
+    if (items.length === 0) continue;
+    items.forEach((c) => remaining.delete(c.id));
+    columns.push({ key: def.key, title: def.title, category: items[0].category, items });
+  }
+
+  const leftoverByCategory = new Map<string, TemplateCardData[]>();
+  for (const c of cards) {
+    if (!remaining.has(c.id)) continue;
+    if (!leftoverByCategory.has(c.category)) leftoverByCategory.set(c.category, []);
+    leftoverByCategory.get(c.category)!.push(c);
+  }
+  for (const [category, items] of leftoverByCategory) {
+    columns.push({ key: category, title: CATEGORY_LABELS[category] || category, category, items });
+  }
+
+  return columns;
+}
 export default function DashboardView({
   templates,
   generations,
@@ -116,6 +173,8 @@ export default function DashboardView({
     [cards, family],
   );
 
+  const columns = useMemo(() => groupIntoColumns(visible), [visible]);
+
   return (
     <>
       <AppHeader
@@ -162,34 +221,53 @@ export default function DashboardView({
               </div>
             </div>
 
-            <div className="grid grid-cols-[repeat(auto-fill,minmax(296px,1fr))] gap-2.5">
-              {loading ? (
-                [0, 160, 320].map((d) => <TemplateCardSkeleton key={d} delay={d} />)
-              ) : visible.length === 0 ? (
-                <p className="text-[13px] text-muted-foreground">
-                  Aucun template dans cette famille.{" "}
-                  <button
-                    type="button"
-                    onClick={onNewTemplate}
-                    className="cursor-pointer bg-transparent text-accent underline"
-                  >
-                    En créer un
-                  </button>
-                </p>
-              ) : (
-                visible.map((card) => (
-                  <TemplateCard
-                    key={card.id}
-                    template={card}
-                    protected={isProtectedTemplate(card.name)}
-                    onEdit={() => onEdit(card.id)}
-                    onGenerate={() => onGenerate(card.id)}
-                    onDuplicate={() => handleDuplicate(card.id)}
-                    onDelete={() => handleDeleteTemplate(card.id)}
-                  />
-                ))
-              )}
-            </div>
+            {loading ? (
+              <div className="grid grid-cols-[repeat(auto-fill,minmax(296px,1fr))] gap-2.5">
+                {[0, 160, 320].map((d) => (
+                  <TemplateCardSkeleton key={d} delay={d} />
+                ))}
+              </div>
+            ) : visible.length === 0 ? (
+              <p className="text-[13px] text-muted-foreground">
+                Aucun template dans cette famille.{" "}
+                <button
+                  type="button"
+                  onClick={onNewTemplate}
+                  className="cursor-pointer bg-transparent text-accent underline"
+                >
+                  En créer un
+                </button>
+              </p>
+            ) : (
+              <div className="grid grid-cols-[repeat(auto-fill,minmax(270px,1fr))] items-start gap-4">
+                {columns.map((col) => (
+                  <div key={col.key} className="flex flex-col gap-2.5">
+                    <div className="flex items-center gap-2 px-0.5">
+                      <CategoryTile category={col.category} size={22} />
+                      <span className="text-[12px] font-semibold tracking-[-0.01em] text-foreground">
+                        {col.title}
+                      </span>
+                      <span className="ml-auto font-mono text-[10.5px] tabular-nums text-muted-foreground">
+                        {col.items.length}
+                      </span>
+                    </div>
+                    <div className="flex flex-col gap-2.5">
+                      {col.items.map((card) => (
+                        <TemplateCard
+                          key={card.id}
+                          template={card}
+                          protected={isProtectedTemplate(card.name)}
+                          onEdit={() => onEdit(card.id)}
+                          onGenerate={() => onGenerate(card.id)}
+                          onDuplicate={() => handleDuplicate(card.id)}
+                          onDelete={() => handleDeleteTemplate(card.id)}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </section>
 
           <section className="flex flex-col gap-3">
