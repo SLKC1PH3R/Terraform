@@ -7,7 +7,7 @@ import { CategoryTile, FAMILIES, metaFor } from "../category-meta";
 import { ResumeQueue, type ResumeItem } from "../resume-queue";
 import { TemplateCard, TemplateCardSkeleton, type TemplateCardData } from "../template-card";
 import { ProtectedDeleteDialog } from "../protected-delete-dialog";
-import { GenerationsTable } from "../generations-table";
+import { RecentGenerationsPanel } from "../recent-generations-panel";
 import { ApiGeneration, ApiTemplate, CATEGORY_LABELS, formatRelative, isProtectedTemplate } from "./shared";
 
 /**
@@ -194,101 +194,103 @@ export default function DashboardView({
       />
 
       <div className="tfgen-scroll min-h-0 flex-1 overflow-y-auto">
-        <div className="flex max-w-[1180px] flex-col gap-7.5 px-5.5 pb-14 pt-6">
+        <div className="flex max-w-[1520px] flex-col gap-7.5 px-5.5 pb-14 pt-6">
           <ResumeQueue items={resumeItems} onResume={onResume} />
 
-          <section className="flex flex-col gap-3">
-            <div className="flex flex-wrap items-center gap-3">
-              <h2 className="m-0 text-[14px] font-semibold tracking-[-0.01em]">Templates</h2>
-              <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
-                {visible.length} / {cards.length}
-              </span>
-              <div className="ml-auto flex gap-0.5 rounded-full border border-secondary bg-[#171613] p-0.5">
-                {FAMILIES.map((f) => (
-                  <button
-                    key={f}
-                    type="button"
-                    onClick={() => setFamily(f)}
-                    className={`rounded-full px-2.5 py-1 text-[11.5px] font-medium transition-colors ${
-                      family === f
-                        ? "bg-secondary text-foreground"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    {f}
-                  </button>
-                ))}
+          <div className="grid grid-cols-[1fr_320px] items-start gap-6">
+            <section className="flex flex-col gap-3">
+              <div className="flex flex-wrap items-center gap-3">
+                <h2 className="m-0 text-[14px] font-semibold tracking-[-0.01em]">Templates</h2>
+                <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
+                  {visible.length} / {cards.length}
+                </span>
+                <div className="ml-auto flex gap-0.5 rounded-full border border-secondary bg-[#171613] p-0.5">
+                  {FAMILIES.map((f) => (
+                    <button
+                      key={f}
+                      type="button"
+                      onClick={() => setFamily(f)}
+                      className={`rounded-full px-2.5 py-1 text-[11.5px] font-medium transition-colors ${
+                        family === f
+                          ? "bg-secondary text-foreground"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      {f}
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
 
-            {loading ? (
-              <div className="grid grid-cols-[repeat(auto-fill,minmax(296px,1fr))] gap-2.5">
-                {[0, 160, 320].map((d) => (
-                  <TemplateCardSkeleton key={d} delay={d} />
-                ))}
-              </div>
-            ) : visible.length === 0 ? (
-              <p className="text-[13px] text-muted-foreground">
-                Aucun template dans cette famille.{" "}
+              {loading ? (
+                <div className="grid grid-cols-[repeat(auto-fill,minmax(296px,1fr))] gap-2.5">
+                  {[0, 160, 320].map((d) => (
+                    <TemplateCardSkeleton key={d} delay={d} />
+                  ))}
+                </div>
+              ) : visible.length === 0 ? (
+                <p className="text-[13px] text-muted-foreground">
+                  Aucun template dans cette famille.{" "}
+                  <button
+                    type="button"
+                    onClick={onNewTemplate}
+                    className="cursor-pointer bg-transparent text-accent underline"
+                  >
+                    En créer un
+                  </button>
+                </p>
+              ) : (
+                <div className="columns-[310px] gap-5">
+                  {columns.map((col) => (
+                    <div key={col.key} className="mb-5 flex flex-col gap-2.5 break-inside-avoid">
+                      <div className="flex items-center gap-2 px-0.5">
+                        <CategoryTile category={col.category} size={22} />
+                        <span className="text-[12px] font-semibold tracking-[-0.01em] text-foreground">
+                          {col.title}
+                        </span>
+                        <span className="ml-auto font-mono text-[10.5px] tabular-nums text-muted-foreground">
+                          {col.items.length}
+                        </span>
+                      </div>
+                      <div className="flex flex-col gap-2.5">
+                        {col.items.map((card) => (
+                          <TemplateCard
+                            key={card.id}
+                            template={card}
+                            protected={isProtectedTemplate(card.name)}
+                            onEdit={() => onEdit(card.id)}
+                            onGenerate={() => onGenerate(card.id)}
+                            onDuplicate={() => handleDuplicate(card.id)}
+                            onDelete={() => handleDeleteTemplate(card.id)}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            <section className="sticky top-0 flex flex-col gap-3">
+              <div className="flex items-center gap-3">
+                <h2 className="m-0 text-[14px] font-semibold tracking-[-0.01em]">
+                  Dernières générations
+                </h2>
                 <button
                   type="button"
-                  onClick={onNewTemplate}
-                  className="cursor-pointer bg-transparent text-accent underline"
+                  onClick={onOpenHistory}
+                  className="ml-auto rounded-lg border border-transparent px-2 py-1 text-[11.5px] font-medium text-accent transition-colors hover:bg-accent/10"
                 >
-                  En créer un
+                  Tout →
                 </button>
-              </p>
-            ) : (
-              <div className="columns-[310px] gap-5">
-                {columns.map((col) => (
-                  <div key={col.key} className="mb-5 flex flex-col gap-2.5 break-inside-avoid">
-                    <div className="flex items-center gap-2 px-0.5">
-                      <CategoryTile category={col.category} size={22} />
-                      <span className="text-[12px] font-semibold tracking-[-0.01em] text-foreground">
-                        {col.title}
-                      </span>
-                      <span className="ml-auto font-mono text-[10.5px] tabular-nums text-muted-foreground">
-                        {col.items.length}
-                      </span>
-                    </div>
-                    <div className="flex flex-col gap-2.5">
-                      {col.items.map((card) => (
-                        <TemplateCard
-                          key={card.id}
-                          template={card}
-                          protected={isProtectedTemplate(card.name)}
-                          onEdit={() => onEdit(card.id)}
-                          onGenerate={() => onGenerate(card.id)}
-                          onDuplicate={() => handleDuplicate(card.id)}
-                          onDelete={() => handleDeleteTemplate(card.id)}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                ))}
               </div>
-            )}
-          </section>
-
-          <section className="flex flex-col gap-3">
-            <div className="flex items-center gap-3">
-              <h2 className="m-0 text-[14px] font-semibold tracking-[-0.01em]">
-                Dernières générations
-              </h2>
-              <button
-                type="button"
-                onClick={onOpenHistory}
-                className="ml-auto rounded-lg border border-transparent px-2.5 py-1 text-xs font-medium text-accent transition-colors hover:bg-accent/10"
-              >
-                Tout l&apos;historique →
-              </button>
-            </div>
-            <GenerationsTable
-              generations={generations.slice(0, 6)}
-              loading={loading}
-              onDelete={onDelete}
-            />
-          </section>
+              <RecentGenerationsPanel
+                generations={generations.slice(0, 10)}
+                loading={loading}
+                onDelete={onDelete}
+              />
+            </section>
+          </div>
         </div>
       </div>
 
